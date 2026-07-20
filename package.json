@@ -2,6 +2,10 @@
   "name": "fedora-tv-launcher",
   "version": "0.2.0",
   "description": "Простой TV-лаунчер для Fedora с веб-приложениями и управлением с пульта",
+  "author": {
+  "name": "BurnToShineact",
+  "email": "example@gmail.com"
+},
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
