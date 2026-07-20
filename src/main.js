@@ -9,6 +9,9 @@ let browserView;
 let browserVisible = false;
 let updateState = { status: 'idle', version: app.getVersion(), progress: 0, message: '' };
 let updateCheckInProgress = false;
+let downloadedUpdatePath = null;
+let updateInstallInProgress = false;
+let systemAppMode = false;
 const isDev = process.argv.includes('--dev');
 const BROWSER_TOOLBAR_HEIGHT = 82;
 
@@ -20,6 +23,16 @@ function sendUpdateState(patch = {}) {
   }
 }
 
+function writeUpdateLog(level, value) {
+  try {
+    const message = String(value?.stack || value?.message || value).replace(/\s+$/g, '');
+    fs.mkdirSync(app.getPath('userData'), { recursive: true });
+    fs.appendFileSync(path.join(app.getPath('userData'), 'update.log'), `${new Date().toISOString()} [${level}] ${message}\n`, 'utf8');
+  } catch {
+    // Логирование не должно мешать запуску или обновлению приложения.
+  }
+}
+
 function normalizeUpdateError(error) {
   const message = String(error?.message || error || 'Неизвестная ошибка');
   if (/404|latest-linux\.yml/i.test(message)) return 'Релиз обновления пока не опубликован в GitHub.';
@@ -28,7 +41,13 @@ function normalizeUpdateError(error) {
 }
 
 function configureUpdater() {
-  autoUpdater.autoDownload = false;
+  autoUpdater.logger = {
+    info: (value) => writeUpdateLog('info', value),
+    warn: (value) => writeUpdateLog('warn', value),
+    error: (value) => writeUpdateLog('error', value),
+    debug: (value) => writeUpdateLog('debug', value)
+  };
+  autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = false;
   autoUpdater.allowDowngrade = false;
 
@@ -38,22 +57,86 @@ function configureUpdater() {
   });
   autoUpdater.on('update-available', (info) => {
     updateCheckInProgress = false;
-    sendUpdateState({ status: 'available', availableVersion: info.version, progress: 0, message: `Доступна версия ${info.version}` });
+    downloadedUpdatePath = null;
+    sendUpdateState({ status: 'available', availableVersion: info.version, progress: 0, message: `Найдена версия ${info.version}. Загрузка начнётся автоматически.` });
   });
   autoUpdater.on('update-not-available', () => {
     updateCheckInProgress = false;
+    downloadedUpdatePath = null;
     sendUpdateState({ status: 'current', availableVersion: null, progress: 0, message: 'Установлена последняя версия.' });
   });
   autoUpdater.on('download-progress', (progress) => {
     sendUpdateState({ status: 'downloading', progress: Math.round(progress.percent || 0), message: 'Загружаем обновление…' });
   });
   autoUpdater.on('update-downloaded', (info) => {
-    sendUpdateState({ status: 'downloaded', availableVersion: info.version, progress: 100, message: `Версия ${info.version} готова к установке.` });
+    downloadedUpdatePath = info.downloadedFile || null;
+    sendUpdateState({ status: 'downloaded', availableVersion: info.version, progress: 100, message: `Версия ${info.version} готова. Для установки Fedora запросит пароль.` });
   });
   autoUpdater.on('error', (error) => {
     updateCheckInProgress = false;
     sendUpdateState({ status: 'error', progress: 0, message: normalizeUpdateError(error) });
   });
+}
+
+function restoreKioskWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  if (!isDev) mainWindow.setKiosk(true);
+  mainWindow.focus();
+}
+
+async function installDownloadedRpm() {
+  if (updateInstallInProgress) return { ok: false, message: 'Установка уже выполняется.' };
+  if (updateState.status !== 'downloaded' || !downloadedUpdatePath) {
+    return { ok: false, message: 'Обновление ещё не загружено.' };
+  }
+
+  let rpmPath;
+  try {
+    rpmPath = fs.realpathSync(downloadedUpdatePath);
+    const stat = fs.statSync(rpmPath);
+    if (!stat.isFile() || path.extname(rpmPath).toLowerCase() !== '.rpm') throw new Error('Некорректный файл обновления');
+  } catch (error) {
+    return { ok: false, message: `Файл обновления недоступен: ${error.message}` };
+  }
+
+  updateInstallInProgress = true;
+  writeUpdateLog('info', `Installing downloaded RPM: ${rpmPath}`);
+  sendUpdateState({ status: 'installing', message: 'Подтвердите установку в системном окне Fedora…' });
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setKiosk(false);
+    mainWindow.setFullScreen(false);
+    mainWindow.minimize();
+  }
+
+  const result = await new Promise((resolve) => {
+    const pkexecPath = fs.existsSync('/usr/bin/pkexec') ? '/usr/bin/pkexec' : 'pkexec';
+    const dnfPath = fs.existsSync('/usr/bin/dnf') ? '/usr/bin/dnf' : 'dnf';
+    execFile(pkexecPath, [dnfPath, 'install', '--nogpgcheck', '-y', rpmPath], { timeout: 15 * 60 * 1000 }, (error, stdout, stderr) => {
+      if (error) resolve({ ok: false, message: String(stderr || error.message).trim() });
+      else resolve({ ok: true, message: String(stdout || '').trim() });
+    });
+  });
+
+  updateInstallInProgress = false;
+  if (!result.ok) {
+    writeUpdateLog('error', result.message);
+    restoreKioskWindow();
+    const message = /dismissed|cancel|not authorized/i.test(result.message)
+      ? 'Установка отменена. Её можно запустить позже из настроек.'
+      : `Не удалось установить обновление: ${result.message}`;
+    sendUpdateState({ status: 'downloaded', message });
+    return { ok: false, message };
+  }
+
+  writeUpdateLog('info', 'RPM installation completed successfully');
+  sendUpdateState({ status: 'installed', message: 'Обновление установлено. Перезапускаем Fedora TV…' });
+  setTimeout(() => {
+    app.relaunch();
+    app.quit();
+  }, 800);
+  return { ok: true };
 }
 
 async function checkForUpdates() {
@@ -292,12 +375,14 @@ function ensureBrowserView() {
 
 function showLauncher() {
   browserVisible = false;
+  if (systemAppMode) {
+    globalShortcut.unregister('Home');
+    systemAppMode = false;
+  }
   if (browserView && mainWindow?.contentView.children.includes(browserView)) {
     mainWindow.contentView.removeChildView(browserView);
   }
-  if (mainWindow?.isMinimized()) mainWindow.restore();
-  mainWindow?.show();
-  mainWindow?.focus();
+  restoreKioskWindow();
   mainWindow?.webContents.focus();
   mainWindow?.webContents.send('launcher:home');
   sendBrowserState({ visible: false });
@@ -357,9 +442,9 @@ app.whenReady().then(() => {
   createWindow();
   mainWindow.webContents.once('did-finish-load', () => {
     sendUpdateState();
-    setTimeout(() => checkForUpdates(), 15000);
+    setTimeout(() => checkForUpdates(), 5000);
   });
-  setInterval(() => checkForUpdates(), 6 * 60 * 60 * 1000);
+  setInterval(() => checkForUpdates(), 60 * 60 * 1000);
 
   globalShortcut.register('Super+Home', showLauncher);
   globalShortcut.register('CommandOrControl+Alt+H', showLauncher);
@@ -442,7 +527,19 @@ ipcMain.handle('app:open', async (_event, selectedApp) => {
   if (storedApp.type === 'system') {
     const installedApp = installedDesktopApps().find((item) => item.desktopId === storedApp.desktopId);
     if (!installedApp) return { ok: false, message: 'Приложение не найдено в системе' };
-    return runSystemCommand('gio', ['launch', installedApp.filePath]);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setKiosk(false);
+      mainWindow.setFullScreen(false);
+    }
+    const result = await runSystemCommand('gio', ['launch', installedApp.filePath]);
+    if (!result.ok) {
+      restoreKioskWindow();
+      return result;
+    }
+    systemAppMode = true;
+    globalShortcut.register('Home', showLauncher);
+    mainWindow?.minimize();
+    return { ...result, external: true };
   }
   if (!/^https:\/\//i.test(storedApp.url || '')) return { ok: false, message: 'Разрешены только HTTPS-адреса' };
   try {
@@ -500,8 +597,4 @@ ipcMain.handle('update:download', async () => {
     return { ok: false, message };
   }
 });
-ipcMain.handle('update:install', () => {
-  if (updateState.status !== 'downloaded') return { ok: false, message: 'Обновление ещё не загружено.' };
-  setImmediate(() => autoUpdater.quitAndInstall(false, true));
-  return { ok: true };
-});
+ipcMain.handle('update:install', () => installDownloadedRpm());

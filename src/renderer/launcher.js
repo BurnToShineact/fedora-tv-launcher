@@ -7,6 +7,13 @@ const browserRefreshButton = document.getElementById('browser-refresh');
 const browserTitle = document.getElementById('browser-title');
 const browserUrl = document.getElementById('browser-url');
 const browserLoading = document.getElementById('browser-loading');
+const updateNotice = document.getElementById('update-notice');
+const updateNoticeTitle = document.getElementById('update-notice-title');
+const updateNoticeMessage = document.getElementById('update-notice-message');
+const updateNoticeProgress = document.getElementById('update-notice-progress');
+const updateNoticeProgressBar = document.getElementById('update-notice-progress-bar');
+const updateNoticeAction = document.getElementById('update-notice-action');
+const updateNoticeLater = document.getElementById('update-notice-later');
 const clock = document.getElementById('clock');
 const dateLabel = document.getElementById('date');
 const backdrop = document.getElementById('dialog-backdrop');
@@ -41,6 +48,8 @@ let toastTimer;
 let selectedColor = '#2563eb';
 let appsCache = [];
 let confirmHandler = null;
+let latestUpdateState = {};
+let dismissedUpdateKey = '';
 
 function renderBrowserState(state = {}) {
   const visible = Boolean(state.visible);
@@ -77,15 +86,46 @@ async function initializeBackground() {
 
 function renderUpdateState(state = {}) {
   const status = state.status || 'idle';
+  const noticeWasHidden = updateNotice.hidden;
+  latestUpdateState = state;
   updateMessage.textContent = state.message || 'Нажмите «Проверить обновления».';
-  updateCheckButton.disabled = status === 'checking' || status === 'downloading';
+  updateCheckButton.disabled = ['checking', 'downloading', 'installing'].includes(status);
   updateCheckButton.textContent = status === 'checking' ? 'Проверяем…' : 'Проверить обновления';
-  updateDownloadButton.hidden = status !== 'available';
+  updateDownloadButton.hidden = true;
   updateInstallButton.hidden = status !== 'downloaded';
-  const showProgress = status === 'downloading' || status === 'downloaded';
+  updateInstallButton.disabled = status === 'installing';
+  const showProgress = ['downloading', 'downloaded', 'installing', 'installed'].includes(status);
   updateProgress.hidden = !showProgress;
   updateProgressBar.style.width = `${Math.max(0, Math.min(100, state.progress || 0))}%`;
+
+  const noticeStatuses = ['available', 'downloading', 'downloaded', 'installing', 'error'];
+  const noticeKey = `${status}:${state.availableVersion || ''}`;
+  const showNotice = noticeStatuses.includes(status) && dismissedUpdateKey !== noticeKey;
+  updateNotice.hidden = !showNotice;
+  updateNoticeTitle.textContent = status === 'downloaded' ? `Версия ${state.availableVersion} готова` : status === 'error' ? 'Не удалось обновиться' : 'Обновление Fedora TV';
+  updateNoticeMessage.textContent = state.message || '';
+  updateNoticeProgress.hidden = status !== 'downloading';
+  updateNoticeProgressBar.style.width = `${Math.max(0, Math.min(100, state.progress || 0))}%`;
+  updateNoticeAction.hidden = !['downloaded', 'error'].includes(status);
+  updateNoticeAction.textContent = status === 'error' ? 'Повторить' : 'Установить';
+  updateNoticeLater.hidden = status === 'installing';
+  if (noticeWasHidden !== updateNotice.hidden && !activeOverlay() && !launcher.hidden) refreshFocusableCache();
   if (!manageBackdrop.hidden) refreshFocusables(Math.min(focusIndex, Math.max(0, focusables.length - 1)));
+}
+
+function requestUpdateInstall() {
+  openConfirm(
+    'Установить обновление?',
+    'Fedora покажет системный запрос пароля, установит RPM и автоматически перезапустит оболочку.',
+    'Установить',
+    async () => {
+      const result = await window.tv.installUpdate();
+      if (!result?.ok) {
+        closeConfirm();
+        showToast(result?.message || 'Не удалось установить обновление');
+      }
+    }
+  );
 }
 
 async function initializeUpdater() {
@@ -112,6 +152,14 @@ function activeOverlay() {
   if (!addBackdrop.hidden) return addBackdrop;
   if (!manageBackdrop.hidden) return manageBackdrop;
   return null;
+}
+
+function refreshFocusableCache() {
+  const current = focusables[focusIndex] || document.activeElement;
+  const scope = activeOverlay() || document;
+  focusables = [...scope.querySelectorAll('.focusable')].filter((el) => !el.disabled && !el.closest('[hidden]'));
+  const currentIndex = focusables.indexOf(current);
+  focusIndex = currentIndex >= 0 ? currentIndex : Math.min(focusIndex, Math.max(0, focusables.length - 1));
 }
 
 function refreshFocusables(preferred = 0) {
@@ -299,6 +347,7 @@ async function activate(element) {
   if (element.dataset.app) {
     const selectedApp = JSON.parse(element.dataset.app);
     if (selectedApp.action === 'settings') return openManagePanel();
+    if (selectedApp.type === 'system') showToast('Открываем системное приложение · Home — вернуться в Fedora TV');
     const result = await window.tv.openApp(selectedApp);
     if (!result?.ok) showToast(result?.message || 'Не удалось открыть приложение');
     return;
@@ -321,9 +370,10 @@ async function renderApps() {
     button.style.setProperty('--card-index', grid.children.length);
     button.style.setProperty('--accent', app.accent || '#334155');
     button.dataset.app = JSON.stringify(app);
-    button.innerHTML = '<span class="icon"></span><span class="title"></span>';
+    button.innerHTML = '<span class="icon"></span><span class="card-copy"><span class="title"></span><span class="kind"></span></span>';
     button.querySelector('.icon').textContent = app.icon || app.title.slice(0,2).toUpperCase();
     button.querySelector('.title').textContent = app.title;
+    button.querySelector('.kind').textContent = app.type === 'system' ? 'Системное · Home для возврата' : app.action === 'settings' ? 'Настройки оболочки' : 'Веб-приложение';
     button.addEventListener('click', () => activate(button));
     grid.appendChild(button);
   }
@@ -331,7 +381,7 @@ async function renderApps() {
   addButton.className = 'app-card add-card focusable';
   addButton.style.setProperty('--card-index', grid.children.length);
   addButton.dataset.special = 'add';
-  addButton.innerHTML = '<span class="icon">＋</span><span class="title">Добавить приложение</span>';
+  addButton.innerHTML = '<span class="icon">＋</span><span class="card-copy"><span class="title">Добавить приложение</span><span class="kind">Сайт или приложение из системы</span></span>';
   addButton.addEventListener('click', () => activate(addButton));
   grid.appendChild(addButton);
 }
@@ -355,10 +405,19 @@ async function loadApps() {
     if (!result?.ok) showToast(result?.message || 'Не удалось загрузить обновление');
   });
   updateInstallButton.addEventListener('click', () => {
-    openConfirm('Установить обновление?', 'Fedora TV перезапустится и откроется уже в новой версии.', 'Перезапустить', async () => {
-      const result = await window.tv.installUpdate();
-      if (!result?.ok) { closeConfirm(); showToast(result?.message || 'Не удалось установить обновление'); }
-    });
+    requestUpdateInstall();
+  });
+  updateNoticeAction.addEventListener('click', async () => {
+    if (latestUpdateState.status === 'error') {
+      dismissedUpdateKey = '';
+      return renderUpdateState(await window.tv.checkForUpdates());
+    }
+    requestUpdateInstall();
+  });
+  updateNoticeLater.addEventListener('click', () => {
+    dismissedUpdateKey = `${latestUpdateState.status}:${latestUpdateState.availableVersion || ''}`;
+    updateNotice.hidden = true;
+    refreshFocusables(0);
   });
   backgroundChooseButton.addEventListener('click', async () => {
     backgroundChooseButton.disabled = true;
@@ -430,6 +489,7 @@ document.addEventListener('mousemove', () => document.querySelectorAll('.focused
 window.tv.onHomeRequested(() => { backdrop.hidden = addBackdrop.hidden = manageBackdrop.hidden = true; refreshFocusables(0); });
 window.tv.onBrowserState(renderBrowserState);
 window.tv.onUpdateState(renderUpdateState);
+window.addEventListener('online', () => window.tv.checkForUpdates());
 updateClock();
 setInterval(updateClock, 1000);
 loadApps().catch((error) => showToast(error.message));

@@ -1,6 +1,6 @@
 {
   "name": "fedora-tv-launcher",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Простой TV-лаунчер для Fedora с веб-приложениями и управлением с пульта",
   "author": {
     "name": "BurnToShineact",
@@ -19,11 +19,11 @@
     "build:linux": "electron-builder --linux rpm AppImage"
   },
   "dependencies": {
-    "electron-updater": "^6.6.2"
+    "electron-updater": "^6.8.4"
   },
   "devDependencies": {
     "electron": "^37.2.3",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.11.1"
   },
   "build": {
     "appId": "tv.fedora.launcher",

@@ -21,6 +21,16 @@
     <div class="browser-loading" id="browser-loading" hidden><span></span></div>
     <div class="browser-home-hint">Home — главный экран</div>
   </header>
+  <aside class="update-notice" id="update-notice" role="status" hidden>
+    <div class="update-notice-icon">↑</div>
+    <div class="update-notice-copy">
+      <strong id="update-notice-title">Обновление Fedora TV</strong>
+      <span id="update-notice-message"></span>
+      <div class="notice-progress" id="update-notice-progress" hidden><span id="update-notice-progress-bar"></span></div>
+    </div>
+    <button class="notice-button primary focusable" id="update-notice-action" hidden>Установить</button>
+    <button class="notice-button focusable" id="update-notice-later">Позже</button>
+  </aside>
   <main class="launcher" id="launcher">
     <header class="topbar">
       <div class="brand">
@@ -33,7 +43,7 @@
     <section class="hero">
       <p class="eyebrow">Домашний экран</p>
       <h1>Что будем смотреть?</h1>
-      <p>Выберите приложение стрелками на пульте и нажмите OK.</p>
+      <p>Стрелки — выбор · OK — открыть · Назад — вернуться · Home — главный экран.</p>
     </section>
 
     <section>
