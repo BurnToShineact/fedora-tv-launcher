@@ -3,7 +3,7 @@ name: Release Fedora TV RPM
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -12,6 +12,7 @@ permissions:
 jobs:
   build-linux-rpm:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,14 +20,15 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: npm
+          node-version: "22"
 
       - name: Install RPM build tools
-        run: sudo apt-get update && sudo apt-get install -y rpm
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build and publish RPM
         env:
