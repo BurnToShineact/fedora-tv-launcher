@@ -23,6 +23,9 @@ const updateProgressBar = document.getElementById('update-progress-bar');
 const updateCheckButton = document.getElementById('update-check');
 const updateDownloadButton = document.getElementById('update-download');
 const updateInstallButton = document.getElementById('update-install');
+const backgroundPreview = document.getElementById('background-preview');
+const backgroundChooseButton = document.getElementById('background-choose');
+const backgroundClearButton = document.getElementById('background-clear');
 let focusables = [];
 let focusIndex = 0;
 let previousFocusIndex = 0;
@@ -30,6 +33,27 @@ let toastTimer;
 let selectedColor = '#2563eb';
 let appsCache = [];
 let confirmHandler = null;
+
+function applyBackground(result = {}) {
+  const dataUrl = result.ok ? result.dataUrl : null;
+  document.body.classList.toggle('has-custom-background', Boolean(dataUrl));
+  if (dataUrl) {
+    document.body.style.setProperty('--user-background', `url(${dataUrl})`);
+    backgroundPreview.style.backgroundImage = `url(${dataUrl})`;
+    backgroundPreview.querySelector('span').textContent = 'Пользовательский фон';
+  } else {
+    document.body.style.removeProperty('--user-background');
+    backgroundPreview.style.removeProperty('background-image');
+    backgroundPreview.querySelector('span').textContent = 'Стандартный фон';
+  }
+  backgroundClearButton.disabled = !dataUrl;
+}
+
+async function initializeBackground() {
+  const result = await window.tv.getBackground();
+  if (!result?.ok) return showToast(result?.message || 'Не удалось загрузить фон');
+  applyBackground(result);
+}
 
 
 function renderUpdateState(state = {}) {
@@ -317,6 +341,24 @@ async function loadApps() {
       if (!result?.ok) { closeConfirm(); showToast(result?.message || 'Не удалось установить обновление'); }
     });
   });
+  backgroundChooseButton.addEventListener('click', async () => {
+    backgroundChooseButton.disabled = true;
+    const result = await window.tv.chooseBackground();
+    backgroundChooseButton.disabled = false;
+    if (result?.canceled) return refreshFocusables(focusIndex);
+    if (!result?.ok) return showToast(result?.message || 'Не удалось установить фон');
+    applyBackground(result);
+    refreshFocusables(focusIndex);
+    showToast('Фон обновлён');
+  });
+  backgroundClearButton.addEventListener('click', async () => {
+    const result = await window.tv.clearBackground();
+    if (!result?.ok) return showToast(result?.message || 'Не удалось сбросить фон');
+    applyBackground(result);
+    refreshFocusables(focusIndex);
+    showToast('Восстановлен стандартный фон');
+  });
+  await initializeBackground();
   await initializeUpdater();
   refreshFocusables(0);
 }

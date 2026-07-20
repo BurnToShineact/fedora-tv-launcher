@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, globalShortcut, session } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, globalShortcut, session, dialog, nativeImage } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
@@ -79,6 +79,52 @@ function appsPath() {
 
 function bundledAppsPath() {
   return path.join(__dirname, '..', 'config', 'apps.json');
+}
+
+function backgroundPath() {
+  return path.join(app.getPath('userData'), 'background.jpg');
+}
+
+function readBackground() {
+  try {
+    const data = fs.readFileSync(backgroundPath());
+    return { ok: true, dataUrl: `data:image/jpeg;base64,${data.toString('base64')}` };
+  } catch (error) {
+    if (error.code === 'ENOENT') return { ok: true, dataUrl: null };
+    return { ok: false, message: 'Не удалось загрузить фоновое изображение' };
+  }
+}
+
+async function chooseBackground() {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Выберите фон Fedora TV',
+    buttonLabel: 'Использовать как фон',
+    properties: ['openFile'],
+    filters: [{ name: 'Изображения', extensions: ['jpg', 'jpeg', 'png'] }]
+  });
+  if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true };
+
+  const selectedPath = result.filePaths[0];
+  try {
+    const stat = fs.statSync(selectedPath);
+    if (stat.size > 30 * 1024 * 1024) return { ok: false, message: 'Файл слишком большой. Выберите изображение до 30 МБ.' };
+    let image = nativeImage.createFromPath(selectedPath);
+    if (image.isEmpty()) return { ok: false, message: 'Не удалось прочитать это изображение' };
+    const size = image.getSize();
+    const scale = Math.min(1, 3840 / size.width, 2160 / size.height);
+    if (scale < 1) {
+      image = image.resize({
+        width: Math.round(size.width * scale),
+        height: Math.round(size.height * scale),
+        quality: 'best'
+      });
+    }
+    fs.mkdirSync(path.dirname(backgroundPath()), { recursive: true });
+    fs.writeFileSync(backgroundPath(), image.toJPEG(88));
+    return readBackground();
+  } catch (error) {
+    return { ok: false, message: `Не удалось сохранить фон: ${error.message}` };
+  }
 }
 
 function readApps() {
@@ -323,6 +369,16 @@ app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
 ipcMain.handle('apps:get', () => readApps());
+ipcMain.handle('background:get', () => readBackground());
+ipcMain.handle('background:choose', () => chooseBackground());
+ipcMain.handle('background:clear', () => {
+  try {
+    fs.rmSync(backgroundPath(), { force: true });
+    return { ok: true, dataUrl: null };
+  } catch (error) {
+    return { ok: false, message: `Не удалось сбросить фон: ${error.message}` };
+  }
+});
 
 ipcMain.handle('apps:add', (_event, candidate) => {
   const title = String(candidate?.title || '').trim().slice(0, 32);

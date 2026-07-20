@@ -12,7 +12,7 @@
     <header class="topbar">
       <div class="brand">
         <div class="brand-mark">F</div>
-        <div><strong>Fedora TV</strong><span>Liquid Home</span></div>
+        <div><strong>Fedora TV</strong><span>Домашний экран</span></div>
       </div>
       <div class="status"><span id="date"></span><strong id="clock">00:00</strong></div>
     </header>
@@ -107,6 +107,21 @@
           <button class="dialog-button secondary focusable" id="update-check">Проверить обновления</button>
           <button class="dialog-button focusable" id="update-download" hidden>Загрузить</button>
           <button class="dialog-button focusable" id="update-install" hidden>Перезапустить и обновить</button>
+        </div>
+      </section>
+      <section class="settings-section background-section">
+        <div class="settings-heading">
+          <div><p class="eyebrow">Оформление</p><h3>Фоновое изображение</h3></div>
+        </div>
+        <div class="background-control">
+          <div class="background-preview" id="background-preview"><span>Стандартный фон</span></div>
+          <div class="background-copy">
+            <p class="panel-description">Выберите JPG или PNG с компьютера. Fedora TV сохранит оптимизированную копию в своём профиле.</p>
+            <div class="update-actions">
+              <button class="dialog-button focusable" id="background-choose">Выбрать изображение</button>
+              <button class="dialog-button secondary focusable" id="background-clear" disabled>Сбросить фон</button>
+            </div>
+          </div>
         </div>
       </section>
       <section class="settings-section">
