@@ -1,0 +1,66 @@
+{
+  "name": "fedora-tv-launcher",
+  "version": "0.2.0",
+  "description": "Простой TV-лаунчер для Fedora с веб-приложениями и управлением с пульта",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "pack:dir": "electron-builder --dir",
+    "build:rpm": "electron-builder --linux rpm",
+    "build:appimage": "electron-builder --linux AppImage",
+    "release:github": "electron-builder --linux rpm --publish always",
+    "release:draft": "electron-builder --linux rpm --publish onTagOrDraft",
+    "build:linux": "electron-builder --linux rpm AppImage"
+  },
+  "devDependencies": {
+    "electron": "^37.2.3",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "tv.fedora.launcher",
+    "productName": "Fedora TV Launcher",
+    "files": [
+      "src/**/*",
+      "config/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "linux": {
+      "target": [
+        {
+          "target": "rpm",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "AudioVideo",
+      "artifactName": "fedora-tv-launcher-${version}-${arch}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "BurnToShineact",
+        "repo": "fedora-tv-launcher",
+        "releaseType": "release"
+      }
+    ],
+    "rpm": {
+      "packageName": "fedora-tv-launcher",
+      "compression": "xz",
+      "depends": [
+        "gtk3",
+        "libnotify",
+        "nss",
+        "libXScrSaver",
+        "xdg-utils",
+        "at-spi2-core"
+      ],
+      "packageCategory": "AudioVideo"
+    }
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
+  }
+}
