@@ -383,3 +383,100 @@ body::before, .ambient { display: none; }
   .background-control { grid-template-columns: 1fr; }
   .background-preview { max-width: 280px; }
 }
+
+/* v1.2 — lighter transparent surfaces */
+:root {
+  --glass: rgba(24, 30, 38, .42);
+  --glass-strong: rgba(22, 27, 34, .68);
+  --glass-border: rgba(226, 236, 255, .2);
+}
+body.has-custom-background {
+  background-image: linear-gradient(rgba(5, 9, 14, .3), rgba(5, 9, 14, .5)), var(--user-background);
+}
+.topbar {
+  border-color: rgba(226, 236, 255, .2);
+  background: rgba(26, 32, 41, .4);
+  box-shadow: 0 16px 46px rgba(0, 0, 0, .18);
+  backdrop-filter: blur(30px) saturate(125%);
+  -webkit-backdrop-filter: blur(30px) saturate(125%);
+}
+.app-card {
+  border-color: rgba(226, 236, 255, .2);
+  background: color-mix(in srgb, var(--accent) 12%, rgba(25, 31, 40, .4));
+  box-shadow: 0 14px 38px rgba(0, 0, 0, .16);
+  backdrop-filter: blur(28px) saturate(120%);
+  -webkit-backdrop-filter: blur(28px) saturate(120%);
+}
+.app-card:hover, .app-card:focus, .app-card.focused {
+  border-color: rgba(235, 242, 255, .52);
+  background: color-mix(in srgb, var(--accent) 17%, rgba(38, 46, 58, .48));
+  box-shadow: 0 20px 52px rgba(0, 0, 0, .24);
+}
+.app-card .icon { background: color-mix(in srgb, var(--accent) 46%, rgba(224, 234, 248, .84)); }
+.add-card { background: rgba(30, 37, 47, .3); }
+.footer-button, .dialog-button.secondary {
+  border-color: rgba(226, 236, 255, .18);
+  background: rgba(39, 47, 59, .38);
+  backdrop-filter: blur(26px) saturate(120%);
+}
+.footer-button:hover, .dialog-button.secondary:hover { background: rgba(56, 66, 81, .5); }
+.footer-button.danger { background: rgba(96, 47, 58, .42); }
+.dialog, .panel {
+  border-color: rgba(226, 236, 255, .2);
+  background: rgba(22, 27, 35, .7);
+  backdrop-filter: blur(38px) saturate(125%);
+  -webkit-backdrop-filter: blur(38px) saturate(125%);
+}
+.source-tabs, .app-form input { background: rgba(10, 14, 20, .34); }
+.settings-section, .manage-row, .system-app-row { background: rgba(42, 50, 62, .32); }
+.empty-state { background: rgba(12, 17, 23, .24); }
+.toast { background: rgba(35, 43, 54, .68); backdrop-filter: blur(30px); }
+
+.browser-toolbar {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 25;
+  height: 82px;
+  padding: 11px 20px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(226, 236, 255, .2);
+  background: rgba(22, 28, 36, .52);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, .2);
+  backdrop-filter: blur(32px) saturate(130%);
+  -webkit-backdrop-filter: blur(32px) saturate(130%);
+}
+.browser-toolbar[hidden], .launcher[hidden] { display: none; }
+.browser-actions { display: flex; gap: 8px; }
+.browser-button {
+  width: 48px;
+  height: 48px;
+  border: 1px solid rgba(226, 236, 255, .18);
+  border-radius: 18px;
+  background: rgba(49, 59, 72, .4);
+  color: var(--text);
+  font-size: 24px;
+  outline: 4px solid transparent;
+  transition: transform .2s ease, background .2s ease, opacity .2s ease;
+}
+.browser-button:hover, .browser-button:focus { transform: scale(1.06); background: rgba(72, 84, 101, .58); }
+.browser-button:disabled { opacity: .34; }
+.browser-page { min-width: 0; }
+.browser-page strong, .browser-page span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser-page strong { font-size: 17px; }
+.browser-page span { max-width: 720px; margin-top: 3px; color: var(--muted); font-size: 13px; }
+.browser-home-hint { color: var(--muted); font-size: 14px; white-space: nowrap; }
+.browser-loading { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; overflow: hidden; }
+.browser-loading[hidden] { display: none; }
+.browser-loading span { display: block; width: 32%; height: 100%; border-radius: 999px; background: #a9c7ff; animation: browser-progress 1.15s ease-in-out infinite; }
+@keyframes browser-progress {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(420%); }
+}
+@media (max-width: 760px) {
+  .browser-home-hint { display: none; }
+  .browser-toolbar { gap: 11px; padding-inline: 12px; }
+}

@@ -1,4 +1,12 @@
 const grid = document.getElementById('app-grid');
+const launcher = document.getElementById('launcher');
+const browserToolbar = document.getElementById('browser-toolbar');
+const browserBackButton = document.getElementById('browser-back');
+const browserHomeButton = document.getElementById('browser-home');
+const browserRefreshButton = document.getElementById('browser-refresh');
+const browserTitle = document.getElementById('browser-title');
+const browserUrl = document.getElementById('browser-url');
+const browserLoading = document.getElementById('browser-loading');
 const clock = document.getElementById('clock');
 const dateLabel = document.getElementById('date');
 const backdrop = document.getElementById('dialog-backdrop');
@@ -33,6 +41,17 @@ let toastTimer;
 let selectedColor = '#2563eb';
 let appsCache = [];
 let confirmHandler = null;
+
+function renderBrowserState(state = {}) {
+  const visible = Boolean(state.visible);
+  browserToolbar.hidden = !visible;
+  launcher.hidden = visible;
+  document.body.classList.toggle('browser-open', visible);
+  browserTitle.textContent = state.title || 'Веб-приложение';
+  browserUrl.textContent = state.url || '';
+  browserBackButton.disabled = !state.canGoBack;
+  browserLoading.hidden = !state.loading;
+}
 
 function applyBackground(result = {}) {
   const dataUrl = result.ok ? result.dataUrl : null;
@@ -358,6 +377,9 @@ async function loadApps() {
     refreshFocusables(focusIndex);
     showToast('Восстановлен стандартный фон');
   });
+  browserBackButton.addEventListener('click', () => window.tv.browserBack());
+  browserHomeButton.addEventListener('click', () => window.tv.goHome());
+  browserRefreshButton.addEventListener('click', () => window.tv.refresh());
   await initializeBackground();
   await initializeUpdater();
   refreshFocusables(0);
@@ -406,6 +428,7 @@ document.addEventListener('keydown', async (event) => {
 
 document.addEventListener('mousemove', () => document.querySelectorAll('.focused').forEach((el) => el.classList.remove('focused')));
 window.tv.onHomeRequested(() => { backdrop.hidden = addBackdrop.hidden = manageBackdrop.hidden = true; refreshFocusables(0); });
+window.tv.onBrowserState(renderBrowserState);
 window.tv.onUpdateState(renderUpdateState);
 updateClock();
 setInterval(updateClock, 1000);

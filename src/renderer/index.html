@@ -8,6 +8,19 @@
 </head>
 <body>
   <div class="ambient" aria-hidden="true"><span></span><span></span><span></span></div>
+  <header class="browser-toolbar" id="browser-toolbar" hidden>
+    <div class="browser-actions">
+      <button class="browser-button focusable" id="browser-back" aria-label="Назад">←</button>
+      <button class="browser-button focusable" id="browser-home" aria-label="На главный экран">⌂</button>
+      <button class="browser-button focusable" id="browser-refresh" aria-label="Обновить страницу">↻</button>
+    </div>
+    <div class="browser-page">
+      <strong id="browser-title">Веб-приложение</strong>
+      <span id="browser-url"></span>
+    </div>
+    <div class="browser-loading" id="browser-loading" hidden><span></span></div>
+    <div class="browser-home-hint">Home — главный экран</div>
+  </header>
   <main class="launcher" id="launcher">
     <header class="topbar">
       <div class="brand">

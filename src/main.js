@@ -10,6 +10,7 @@ let browserVisible = false;
 let updateState = { status: 'idle', version: app.getVersion(), progress: 0, message: '' };
 let updateCheckInProgress = false;
 const isDev = process.argv.includes('--dev');
+const BROWSER_TOOLBAR_HEIGHT = 82;
 
 
 function sendUpdateState(patch = {}) {
@@ -247,7 +248,7 @@ function sendBrowserState(extra = {}) {
 function resizeBrowserView() {
   if (!mainWindow || !browserView || !browserVisible) return;
   const [width, height] = mainWindow.getContentSize();
-  browserView.setBounds({ x: 0, y: 0, width, height });
+  browserView.setBounds({ x: 0, y: BROWSER_TOOLBAR_HEIGHT, width, height: Math.max(1, height - BROWSER_TOOLBAR_HEIGHT) });
 }
 
 function ensureBrowserView() {
@@ -294,6 +295,9 @@ function showLauncher() {
   if (browserView && mainWindow?.contentView.children.includes(browserView)) {
     mainWindow.contentView.removeChildView(browserView);
   }
+  if (mainWindow?.isMinimized()) mainWindow.restore();
+  mainWindow?.show();
+  mainWindow?.focus();
   mainWindow?.webContents.focus();
   mainWindow?.webContents.send('launcher:home');
   sendBrowserState({ visible: false });

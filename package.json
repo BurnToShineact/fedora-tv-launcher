@@ -1,6 +1,6 @@
 {
   "name": "fedora-tv-launcher",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Простой TV-лаунчер для Fedora с веб-приложениями и управлением с пульта",
   "author": {
     "name": "BurnToShineact",
