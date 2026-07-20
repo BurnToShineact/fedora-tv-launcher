@@ -4,6 +4,7 @@ const browserToolbar = document.getElementById('browser-toolbar');
 const browserBackButton = document.getElementById('browser-back');
 const browserHomeButton = document.getElementById('browser-home');
 const browserRefreshButton = document.getElementById('browser-refresh');
+const browserKeyboardButton = document.getElementById('browser-keyboard');
 const browserTitle = document.getElementById('browser-title');
 const browserUrl = document.getElementById('browser-url');
 const browserLoading = document.getElementById('browser-loading');
@@ -41,6 +42,22 @@ const updateInstallButton = document.getElementById('update-install');
 const backgroundPreview = document.getElementById('background-preview');
 const backgroundChooseButton = document.getElementById('background-choose');
 const backgroundClearButton = document.getElementById('background-clear');
+const keyboardToggle = document.getElementById('keyboard-toggle');
+const settingsKeyboardToggle = document.getElementById('settings-keyboard-toggle');
+const onscreenKeyboard = document.getElementById('onscreen-keyboard');
+const keyboardKeys = document.getElementById('keyboard-keys');
+const keyboardClose = document.getElementById('keyboard-close');
+const keyboardLanguage = document.getElementById('keyboard-language');
+const volumeSlider = document.getElementById('volume-slider');
+const volumeValue = document.getElementById('volume-value');
+const muteToggle = document.getElementById('mute-toggle');
+const wifiToggle = document.getElementById('wifi-toggle');
+const wifiScan = document.getElementById('wifi-scan');
+const wifiList = document.getElementById('wifi-list');
+const wifiPasswordForm = document.getElementById('wifi-password-form');
+const wifiPassword = document.getElementById('wifi-password');
+const wifiPasswordLabel = document.getElementById('wifi-password-label');
+const wifiPasswordCancel = document.getElementById('wifi-password-cancel');
 let focusables = [];
 let focusIndex = 0;
 let toastTimer;
@@ -50,8 +67,41 @@ let confirmHandler = null;
 let latestUpdateState = {};
 let dismissedUpdateKey = '';
 let browserOpen = false;
+let keyboardOpen = false;
+let currentLanguage = 'ru';
+let selectedNetwork = null;
+let lastTextInput = null;
+let latestAudioState = null;
 const rememberedFocus = new WeakMap();
 const overlayReturnFocus = new WeakMap();
+
+const translations = {
+  ru: {
+    soundGroup: 'Звук', soundTitle: 'Громкость', mute: 'Выключить звук', unmute: 'Включить звук', networkTitle: 'Беспроводная сеть', scan: 'Обновить список', connect: 'Подключиться', cancel: 'Отмена', languageGroup: 'Язык', languageTitle: 'Язык интерфейса', inputGroup: 'Ввод', keyboardTitle: 'Экранная клавиатура', keyboardDescription: 'Открывается автоматически в полях ввода. Её также можно включить кнопкой ⌨ в верхней панели.', openKeyboard: 'Открыть клавиатуру', noNetworks: 'Сети Wi‑Fi не найдены.', wifiOff: 'Wi‑Fi выключен', connected: 'Подключено', secured: 'Защищённая сеть', open: 'Открытая сеть', signal: 'Сигнал', password: 'Пароль для', apps: 'Приложения', settings: 'Настройки', webApp: 'Веб-приложение', systemApp: 'Системное · Home для возврата', settingsKind: 'Настройки оболочки', addApp: 'Добавить приложение', addKind: 'Сайт или приложение из системы', brandSubtitle: 'Отдельная TV-сессия', logout: 'Сменить пользователя', reboot: 'Перезагрузка', poweroff: 'Выключение', newTile: 'Новая плитка', website: 'Веб-сайт', fromSystem: 'Из системы', systemGroup: 'Система', updateTitle: 'Обновление Fedora TV OS', checkUpdates: 'Проверить обновления', appearanceGroup: 'Оформление', backgroundTitle: 'Фоновое изображение', chooseImage: 'Выбрать изображение', resetBackground: 'Сбросить фон', myApps: 'Мои приложения', done: 'Готово'
+  },
+  en: {
+    soundGroup: 'Sound', soundTitle: 'Volume', mute: 'Mute', unmute: 'Unmute', networkTitle: 'Wireless network', scan: 'Refresh list', connect: 'Connect', cancel: 'Cancel', languageGroup: 'Language', languageTitle: 'Interface language', inputGroup: 'Input', keyboardTitle: 'On-screen keyboard', keyboardDescription: 'Opens automatically for text fields. You can also use the ⌨ button in the top bar.', openKeyboard: 'Open keyboard', noNetworks: 'No Wi-Fi networks found.', wifiOff: 'Wi-Fi is off', connected: 'Connected', secured: 'Secured network', open: 'Open network', signal: 'Signal', password: 'Password for', apps: 'Apps', settings: 'Settings', webApp: 'Web app', systemApp: 'System app · Home to return', settingsKind: 'Shell settings', addApp: 'Add app', addKind: 'Website or system app', brandSubtitle: 'Dedicated TV session', logout: 'Switch user', reboot: 'Restart', poweroff: 'Power off', newTile: 'New tile', website: 'Website', fromSystem: 'From system', systemGroup: 'System', updateTitle: 'Fedora TV OS update', checkUpdates: 'Check for updates', appearanceGroup: 'Appearance', backgroundTitle: 'Background image', chooseImage: 'Choose image', resetBackground: 'Reset background', myApps: 'My apps', done: 'Done'
+  }
+};
+
+function t(key) { return translations[currentLanguage]?.[key] || translations.ru[key] || key; }
+
+function applyLanguage(language) {
+  currentLanguage = language === 'en' ? 'en' : 'ru';
+  document.documentElement.lang = currentLanguage;
+  document.querySelectorAll('[data-i18n]').forEach((element) => { element.textContent = t(element.dataset.i18n); });
+  document.querySelectorAll('[data-language]').forEach((button) => button.classList.toggle('selected', button.dataset.language === currentLanguage));
+  const english = currentLanguage === 'en';
+  document.querySelector('.hero .eyebrow').textContent = english ? 'Home screen' : 'Домашний экран';
+  document.querySelector('.hero h1').textContent = english ? 'What shall we watch?' : 'Что будем смотреть?';
+  document.querySelector('.hero > p:last-child').textContent = english ? 'Arrows — navigate · OK — open · Back — return · Home — home screen.' : 'Стрелки — выбор · OK — открыть · Назад — вернуться · Home — главный экран.';
+  document.querySelector('.section-title h2').textContent = t('apps');
+  document.getElementById('manage-title').textContent = t('settings');
+  keyboardLanguage.textContent = english ? 'English' : 'Русский';
+  renderKeyboard();
+  if (latestAudioState) renderAudio(latestAudioState);
+  updateClock();
+}
 
 function renderBrowserState(state = {}) {
   const visible = Boolean(state.visible);
@@ -63,6 +113,7 @@ function renderBrowserState(state = {}) {
   browserUrl.textContent = state.url || '';
   browserBackButton.disabled = !state.canGoBack;
   browserLoading.hidden = !state.loading;
+  if (!visible && keyboardOpen) setKeyboardVisible(false);
 }
 
 function applyBackground(result = {}) {
@@ -139,8 +190,9 @@ async function initializeUpdater() {
 
 function updateClock() {
   const now = new Date();
-  clock.textContent = new Intl.DateTimeFormat('ru-RU', { hour:'2-digit', minute:'2-digit' }).format(now);
-  dateLabel.textContent = new Intl.DateTimeFormat('ru-RU', { weekday:'short', day:'numeric', month:'long' }).format(now);
+  const locale = currentLanguage === 'en' ? 'en-US' : 'ru-RU';
+  clock.textContent = new Intl.DateTimeFormat(locale, { hour:'2-digit', minute:'2-digit' }).format(now);
+  dateLabel.textContent = new Intl.DateTimeFormat(locale, { weekday:'short', day:'numeric', month:'long' }).format(now);
 }
 
 function showToast(message) {
@@ -158,6 +210,7 @@ function activeOverlay() {
 }
 
 function navigationScope() {
+  if (keyboardOpen) return onscreenKeyboard;
   return activeOverlay() || (browserOpen ? browserToolbar : document);
 }
 
@@ -320,7 +373,7 @@ async function loadSystemApps() {
         <div class="manage-icon" style="--accent:#334155"></div>
         <div class="manage-copy"><strong></strong><span></span></div>
         <button type="button" class="system-add-button focusable"></button>`;
-      row.querySelector('.manage-icon').textContent = installedApp.title.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+      renderAppIcon(row.querySelector('.manage-icon'), installedApp, installedApp.title.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase());
       row.querySelector('strong').textContent = installedApp.title;
       row.querySelector('.manage-copy span').textContent = installedApp.description;
       const addButton = row.querySelector('.system-add-button');
@@ -348,10 +401,11 @@ function renderManageList() {
     const row = document.createElement('div');
     row.className = 'manage-row';
     row.innerHTML = `
-      <div class="manage-icon" style="--accent:${app.accent}">${app.icon}</div>
+      <div class="manage-icon" style="--accent:${app.accent}"></div>
       <div class="manage-copy"><strong></strong><span></span></div>
       <button class="delete-button focusable">Удалить</button>`;
     row.querySelector('strong').textContent = app.title;
+    renderAppIcon(row.querySelector('.manage-icon'), app);
     row.querySelector('.manage-copy span').textContent = app.type === 'system' ? 'Системное приложение' : app.url;
     row.querySelector('.delete-button').addEventListener('click', () => requestDelete(app));
     manageList.appendChild(row);
@@ -363,11 +417,128 @@ function openManagePanel() {
   renderManageList();
   manageBackdrop.hidden = false;
   refreshFocusables(0);
+  loadSystemSettings().then(() => refreshFocusables(0));
 }
 
 function closeManagePanel() {
+  if (keyboardOpen) setKeyboardVisible(false);
   manageBackdrop.hidden = true;
   refreshFocusables(overlayReturnFocus.get(manageBackdrop) || 0);
+}
+
+function renderAudio(state = {}) {
+  if (!state.ok) return;
+  latestAudioState = state;
+  volumeSlider.value = state.volume;
+  volumeValue.textContent = `${state.volume}%`;
+  muteToggle.textContent = state.muted ? t('unmute') : t('mute');
+  muteToggle.classList.toggle('active', Boolean(state.muted));
+}
+
+function renderWifi(state = {}) {
+  wifiToggle.setAttribute('aria-checked', String(Boolean(state.enabled)));
+  wifiList.innerHTML = '';
+  if (!state.ok || !state.enabled) {
+    wifiList.innerHTML = `<div class="empty-state">${state.enabled === false ? t('wifiOff') : (state.message || t('noNetworks'))}</div>`;
+    return;
+  }
+  if (!state.networks?.length) {
+    wifiList.innerHTML = `<div class="empty-state">${t('noNetworks')}</div>`;
+    return;
+  }
+  for (const network of state.networks.slice(0, 12)) {
+    const button = document.createElement('button');
+    button.className = `wifi-network focusable${network.active ? ' active' : ''}`;
+    button.innerHTML = '<span><strong></strong><span class="wifi-detail"></span></span><b></b>';
+    button.querySelector('strong').textContent = network.ssid;
+    button.querySelector('.wifi-detail').textContent = network.active ? t('connected') : (network.secure ? t('secured') : t('open'));
+    button.querySelector('b').textContent = `${network.signal}%`;
+    button.addEventListener('click', () => selectNetwork(network));
+    wifiList.appendChild(button);
+  }
+}
+
+async function selectNetwork(network) {
+  if (network.active) return showToast(t('connected'));
+  selectedNetwork = network;
+  if (!network.secure) {
+    const result = await window.tv.connectWifi({ ssid: network.ssid, password: '' });
+    if (!result?.ok) return showToast(result?.message || 'Wi‑Fi error');
+    renderWifi(result);
+    return showToast(currentLanguage === 'en' ? 'Connected' : 'Подключено');
+  }
+  wifiPasswordLabel.textContent = `${t('password')} «${network.ssid}»`;
+  wifiPassword.value = '';
+  wifiPasswordForm.hidden = false;
+  setKeyboardVisible(true, wifiPassword);
+}
+
+async function loadSystemSettings() {
+  const result = await window.tv.getSettings();
+  if (!result?.ok) return showToast(result?.message || 'Не удалось загрузить настройки');
+  applyLanguage(result.preferences?.language);
+  renderAudio(result.audio);
+  renderWifi(result.wifi);
+}
+
+function renderKeyboard() {
+  if (!keyboardKeys) return;
+  const rows = currentLanguage === 'en'
+    ? [['1','2','3','4','5','6','7','8','9','0','-','='], ['q','w','e','r','t','y','u','i','o','p','[',']'], ['a','s','d','f','g','h','j','k','l',';','\'','Backspace'], ['z','x','c','v','b','n','m',',','.','/','Enter']]
+    : [['1','2','3','4','5','6','7','8','9','0','-','='], ['й','ц','у','к','е','н','г','ш','щ','з','х','ъ'], ['ф','ы','в','а','п','р','о','л','д','ж','э','Backspace'], ['я','ч','с','м','и','т','ь','б','ю','.','Enter']];
+  keyboardKeys.innerHTML = '';
+  for (const key of rows.flat()) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `keyboard-key focusable${['Backspace','Enter'].includes(key) ? ' wide' : ''}`;
+    button.dataset.key = key;
+    button.textContent = key === 'Backspace' ? '⌫' : key === 'Enter' ? '↵' : key;
+    button.addEventListener('click', () => typeKeyboardKey(key));
+    keyboardKeys.appendChild(button);
+  }
+  const space = document.createElement('button');
+  space.type = 'button';
+  space.className = 'keyboard-key space focusable';
+  space.dataset.key = ' ';
+  space.textContent = currentLanguage === 'en' ? 'Space' : 'Пробел';
+  space.addEventListener('click', () => typeKeyboardKey(' '));
+  keyboardKeys.appendChild(space);
+}
+
+function typeKeyboardKey(key) {
+  if (browserOpen) return window.tv.keyboardInput(key);
+  const input = lastTextInput;
+  if (!input) return;
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? start;
+  if (key === 'Backspace') {
+    const from = start === end ? Math.max(0, start - 1) : start;
+    input.setRangeText('', from, end, 'end');
+  } else if (key === 'Enter') {
+    input.form?.requestSubmit();
+  } else {
+    input.setRangeText(key, start, end, 'end');
+  }
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function setKeyboardVisible(visible, input = null) {
+  if (input) lastTextInput = input;
+  keyboardOpen = Boolean(visible);
+  onscreenKeyboard.hidden = !keyboardOpen;
+  document.body.classList.toggle('keyboard-open', keyboardOpen);
+  if (browserOpen) window.tv.setBrowserKeyboard(keyboardOpen);
+  if (keyboardOpen) {
+    renderKeyboard();
+    if (input) {
+      focusables = availableFocusables(onscreenKeyboard);
+      focusIndex = 0;
+    } else {
+      refreshFocusables(0);
+    }
+  } else {
+    refreshFocusables(lastTextInput || 0);
+  }
 }
 
 function requestDelete(app) {
@@ -425,9 +596,10 @@ async function renderApps() {
     button.style.setProperty('--accent', app.accent || '#334155');
     button.dataset.app = JSON.stringify(app);
     button.innerHTML = '<span class="icon"></span><span class="card-copy"><span class="title"></span><span class="kind"></span></span>';
-    button.querySelector('.icon').textContent = app.icon || app.title.slice(0,2).toUpperCase();
-    button.querySelector('.title').textContent = app.title;
-    button.querySelector('.kind').textContent = app.type === 'system' ? 'Системное · Home для возврата' : app.action === 'settings' ? 'Настройки оболочки' : 'Веб-приложение';
+    renderAppIcon(button.querySelector('.icon'), app);
+    const builtInEnglishTitles = { vkvideo: 'VK Video', browser: 'Browser', settings: 'Settings' };
+    button.querySelector('.title').textContent = currentLanguage === 'en' ? (app.titleEn || builtInEnglishTitles[app.id] || app.title) : app.title;
+    button.querySelector('.kind').textContent = app.type === 'system' ? t('systemApp') : app.action === 'settings' ? t('settingsKind') : t('webApp');
     button.addEventListener('click', () => activate(button));
     grid.appendChild(button);
   }
@@ -435,12 +607,13 @@ async function renderApps() {
   addButton.className = 'app-card add-card focusable';
   addButton.style.setProperty('--card-index', grid.children.length);
   addButton.dataset.special = 'add';
-  addButton.innerHTML = '<span class="icon">＋</span><span class="card-copy"><span class="title">Добавить приложение</span><span class="kind">Сайт или приложение из системы</span></span>';
+  addButton.innerHTML = `<span class="icon">＋</span><span class="card-copy"><span class="title">${t('addApp')}</span><span class="kind">${t('addKind')}</span></span>`;
   addButton.addEventListener('click', () => activate(addButton));
   grid.appendChild(addButton);
 }
 
 async function loadApps() {
+  await loadSystemSettings();
   await renderApps();
   document.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', () => activate(button)));
   document.querySelectorAll('[data-add-close]').forEach((button) => button.addEventListener('click', closeAddPanel));
@@ -493,9 +666,73 @@ async function loadApps() {
   browserBackButton.addEventListener('click', () => window.tv.browserBack());
   browserHomeButton.addEventListener('click', () => window.tv.goHome());
   browserRefreshButton.addEventListener('click', () => window.tv.refresh());
+  browserKeyboardButton.addEventListener('click', () => setKeyboardVisible(!keyboardOpen));
+  keyboardToggle.addEventListener('click', () => setKeyboardVisible(!keyboardOpen));
+  settingsKeyboardToggle.addEventListener('click', () => setKeyboardVisible(!keyboardOpen));
+  keyboardClose.addEventListener('click', () => setKeyboardVisible(false));
+  volumeSlider.addEventListener('input', () => { volumeValue.textContent = `${volumeSlider.value}%`; });
+  volumeSlider.addEventListener('change', async () => {
+    const result = await window.tv.setVolume(volumeSlider.value);
+    if (!result?.ok) return showToast(result?.message || 'Audio error');
+    renderAudio(result);
+  });
+  muteToggle.addEventListener('click', async () => {
+    const result = await window.tv.toggleMute();
+    if (!result?.ok) return showToast(result?.message || 'Audio error');
+    renderAudio(result);
+  });
+  wifiToggle.addEventListener('click', async () => {
+    wifiToggle.disabled = true;
+    const result = await window.tv.toggleWifi(wifiToggle.getAttribute('aria-checked') !== 'true');
+    wifiToggle.disabled = false;
+    if (!result?.ok) return showToast(result?.message || 'Wi‑Fi error');
+    renderWifi(result);
+    refreshFocusables(wifiToggle);
+  });
+  wifiScan.addEventListener('click', async () => {
+    wifiScan.disabled = true;
+    const result = await window.tv.scanWifi();
+    wifiScan.disabled = false;
+    if (!result?.ok) return showToast(result?.message || 'Wi‑Fi error');
+    renderWifi(result);
+    refreshFocusables(wifiScan);
+  });
+  wifiPasswordForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!selectedNetwork) return;
+    const result = await window.tv.connectWifi({ ssid: selectedNetwork.ssid, password: wifiPassword.value });
+    if (!result?.ok) return showToast(result?.message || 'Wi‑Fi error');
+    wifiPasswordForm.hidden = true;
+    setKeyboardVisible(false);
+    renderWifi(result);
+    showToast(currentLanguage === 'en' ? 'Connected' : 'Подключено');
+  });
+  wifiPasswordCancel.addEventListener('click', () => { wifiPasswordForm.hidden = true; setKeyboardVisible(false); });
+  document.querySelectorAll('[data-language]').forEach((button) => button.addEventListener('click', async () => {
+    await window.tv.setLanguage(button.dataset.language);
+    applyLanguage(button.dataset.language);
+    await renderApps();
+    refreshFocusables(button);
+  }));
   await initializeBackground();
   await initializeUpdater();
   refreshFocusables(0);
+}
+
+function renderAppIcon(container, app, fallback = null) {
+  const builtInIcons = { youtube: 'youtube.svg', vkvideo: 'vk.svg', rutube: 'rutube.svg', twitch: 'twitch.svg', browser: 'google.svg', settings: 'fedora.svg' };
+  const iconFile = app.iconPath || builtInIcons[app.id];
+  const source = app.iconDataUrl || (/^[a-z0-9_-]+\.svg$/i.test(iconFile || '') ? `../../assets/app-icons/${iconFile}` : null);
+  container.replaceChildren();
+  if (source) {
+    const image = document.createElement('img');
+    image.src = source;
+    image.alt = '';
+    image.addEventListener('error', () => { container.textContent = fallback || app.icon || app.title.slice(0, 2).toUpperCase(); }, { once: true });
+    container.appendChild(image);
+  } else {
+    container.textContent = fallback || app.icon || app.title.slice(0, 2).toUpperCase();
+  }
 }
 
 addForm.addEventListener('submit', async (event) => {
@@ -527,6 +764,7 @@ const keyActions = new Map([
 ]);
 
 function closeAllOverlays() {
+  if (keyboardOpen) setKeyboardVisible(false);
   backdrop.hidden = true;
   addBackdrop.hidden = true;
   manageBackdrop.hidden = true;
@@ -537,6 +775,7 @@ async function handleInputAction(action) {
   if (action === 'left' || action === 'right' || action === 'up' || action === 'down') return moveFocus(action);
   if (action === 'select') return document.activeElement?.classList.contains('focusable') && document.activeElement.click();
   if (action === 'back') {
+    if (keyboardOpen) return setKeyboardVisible(false);
     if (!backdrop.hidden) return closeConfirm();
     if (!addBackdrop.hidden) return closeAddPanel();
     if (!manageBackdrop.hidden) return closeManagePanel();
@@ -570,6 +809,14 @@ document.addEventListener('keydown', (event) => {
   if (event.repeat && ['select', 'back', 'home', 'menu', 'power'].includes(action)) return;
   event.preventDefault();
   handleInputAction(action);
+});
+
+document.addEventListener('focusin', (event) => {
+  const input = event.target;
+  if (input instanceof HTMLInputElement && !['range', 'color', 'checkbox', 'radio'].includes(input.type)) {
+    lastTextInput = input;
+    setKeyboardVisible(true, input);
+  }
 });
 
 const gamepadState = new Map();

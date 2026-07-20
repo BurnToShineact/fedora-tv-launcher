@@ -13,6 +13,7 @@
       <button class="browser-button focusable" id="browser-back" aria-label="Назад">←</button>
       <button class="browser-button focusable" id="browser-home" aria-label="На главный экран">⌂</button>
       <button class="browser-button focusable" id="browser-refresh" aria-label="Обновить страницу">↻</button>
+      <button class="browser-button focusable" id="browser-keyboard" aria-label="Экранная клавиатура">⌨</button>
     </div>
     <div class="browser-page">
       <strong id="browser-title">Веб-приложение</strong>
@@ -35,9 +36,9 @@
     <header class="topbar">
       <div class="brand">
         <div class="brand-mark">F</div>
-        <div><strong>Fedora TV OS</strong><span>Отдельная TV-сессия</span></div>
+        <div><strong>Fedora TV OS</strong><span data-i18n="brandSubtitle">Отдельная TV-сессия</span></div>
       </div>
-      <div class="status"><span id="date"></span><strong id="clock">00:00</strong></div>
+      <div class="status"><button class="topbar-button focusable" id="keyboard-toggle" aria-label="Экранная клавиатура">⌨</button><span id="date"></span><strong id="clock">00:00</strong></div>
     </header>
 
     <section class="hero">
@@ -52,9 +53,9 @@
     </section>
 
     <footer class="footer-actions" data-nav-zone="system" data-nav-order="2">
-      <button class="footer-button focusable" data-action="logout"><span>⇥</span>Сменить пользователя</button>
-      <button class="footer-button focusable" data-action="reboot"><span>↻</span>Перезагрузка</button>
-      <button class="footer-button focusable danger" data-action="poweroff"><span>⏻</span>Выключение</button>
+      <button class="footer-button focusable" data-action="logout"><span>⇥</span><b data-i18n="logout">Сменить пользователя</b></button>
+      <button class="footer-button focusable" data-action="reboot"><span>↻</span><b data-i18n="reboot">Перезагрузка</b></button>
+      <button class="footer-button focusable danger" data-action="poweroff"><span>⏻</span><b data-i18n="poweroff">Выключение</b></button>
     </footer>
   </main>
 
@@ -72,12 +73,12 @@
   <div class="panel-backdrop" id="add-app-backdrop" hidden>
     <section class="panel" role="dialog" aria-modal="true" aria-labelledby="add-app-title">
       <div class="panel-header">
-        <div><p class="eyebrow">Новая плитка</p><h2 id="add-app-title">Добавить приложение</h2></div>
+        <div><p class="eyebrow" data-i18n="newTile">Новая плитка</p><h2 id="add-app-title" data-i18n="addApp">Добавить приложение</h2></div>
         <button class="icon-button focusable" data-add-close aria-label="Закрыть">×</button>
       </div>
       <div class="source-tabs" role="tablist" aria-label="Источник приложения">
-        <button type="button" class="source-tab focusable selected" data-add-mode="web" role="tab" aria-selected="true">Веб-сайт</button>
-        <button type="button" class="source-tab focusable" data-add-mode="system" role="tab" aria-selected="false">Из системы</button>
+        <button type="button" class="source-tab focusable selected" data-add-mode="web" role="tab" aria-selected="true" data-i18n="website">Веб-сайт</button>
+        <button type="button" class="source-tab focusable" data-add-mode="system" role="tab" aria-selected="false" data-i18n="fromSystem">Из системы</button>
       </div>
       <form id="add-app-form" class="app-form">
         <label>Название
@@ -117,45 +118,87 @@
   <div class="panel-backdrop" id="manage-backdrop" hidden>
     <section class="panel wide" role="dialog" aria-modal="true" aria-labelledby="manage-title">
       <div class="panel-header">
-        <div><p class="eyebrow">Настройки</p><h2 id="manage-title">Мои приложения</h2></div>
+        <div><p class="eyebrow" data-i18n="settings">Настройки</p><h2 id="manage-title">Настройки</h2></div>
         <button class="icon-button focusable" data-manage-close aria-label="Закрыть">×</button>
       </div>
       <section class="settings-section update-section">
         <div class="settings-heading">
-          <div><p class="eyebrow">Система</p><h3>Обновление Fedora TV OS</h3></div>
+          <div><p class="eyebrow" data-i18n="systemGroup">Система</p><h3 data-i18n="updateTitle">Обновление Fedora TV OS</h3></div>
           <span class="version-badge" id="app-version">Версия —</span>
         </div>
         <p class="update-message" id="update-message">Проверка состояния обновлений…</p>
         <div class="progress-track" id="update-progress" hidden><span id="update-progress-bar"></span></div>
         <div class="update-actions">
-          <button class="dialog-button secondary focusable" id="update-check">Проверить обновления</button>
+          <button class="dialog-button secondary focusable" id="update-check" data-i18n="checkUpdates">Проверить обновления</button>
           <button class="dialog-button focusable" id="update-download" hidden>Загрузить</button>
           <button class="dialog-button focusable" id="update-install" hidden>Перезапустить и обновить</button>
         </div>
       </section>
+      <section class="settings-section">
+        <div class="settings-heading">
+          <div><p class="eyebrow" data-i18n="soundGroup">Звук</p><h3 data-i18n="soundTitle">Громкость</h3></div>
+          <span class="version-badge" id="volume-value">—</span>
+        </div>
+        <div class="range-control">
+          <span aria-hidden="true">🔈</span>
+          <input class="focusable" id="volume-slider" type="range" min="0" max="100" step="5" value="50" aria-label="Громкость">
+          <span aria-hidden="true">🔊</span>
+          <button class="dialog-button secondary focusable" id="mute-toggle" data-i18n="mute">Выключить звук</button>
+        </div>
+      </section>
+      <section class="settings-section">
+        <div class="settings-heading">
+          <div><p class="eyebrow">Wi‑Fi</p><h3 data-i18n="networkTitle">Беспроводная сеть</h3></div>
+          <button class="switch focusable" id="wifi-toggle" role="switch" aria-checked="false"><span></span></button>
+        </div>
+        <div class="update-actions settings-actions"><button class="dialog-button secondary focusable" id="wifi-scan" data-i18n="scan">Обновить список</button></div>
+        <div class="wifi-list" id="wifi-list" aria-live="polite"></div>
+        <form class="wifi-password" id="wifi-password-form" hidden>
+          <label><span id="wifi-password-label">Пароль</span><input class="focusable" id="wifi-password" type="password" autocomplete="current-password"></label>
+          <button class="dialog-button focusable" type="submit" data-i18n="connect">Подключиться</button>
+          <button class="dialog-button secondary focusable" type="button" id="wifi-password-cancel" data-i18n="cancel">Отмена</button>
+        </form>
+      </section>
+      <section class="settings-section">
+        <div class="settings-heading"><div><p class="eyebrow" data-i18n="languageGroup">Язык</p><h3 data-i18n="languageTitle">Язык интерфейса</h3></div></div>
+        <div class="language-options" role="radiogroup">
+          <button class="language-button focusable selected" data-language="ru">Русский</button>
+          <button class="language-button focusable" data-language="en">English</button>
+        </div>
+      </section>
+      <section class="settings-section">
+        <div class="settings-heading"><div><p class="eyebrow" data-i18n="inputGroup">Ввод</p><h3 data-i18n="keyboardTitle">Экранная клавиатура</h3></div></div>
+        <p class="panel-description" data-i18n="keyboardDescription">Открывается автоматически в полях ввода. Её также можно включить кнопкой ⌨ в верхней панели.</p>
+        <button class="dialog-button secondary focusable" id="settings-keyboard-toggle" data-i18n="openKeyboard">Открыть клавиатуру</button>
+      </section>
       <section class="settings-section background-section">
         <div class="settings-heading">
-          <div><p class="eyebrow">Оформление</p><h3>Фоновое изображение</h3></div>
+          <div><p class="eyebrow" data-i18n="appearanceGroup">Оформление</p><h3 data-i18n="backgroundTitle">Фоновое изображение</h3></div>
         </div>
         <div class="background-control">
           <div class="background-preview" id="background-preview"><span>Стандартный фон</span></div>
           <div class="background-copy">
             <p class="panel-description">Выберите JPG или PNG с компьютера. Fedora TV сохранит оптимизированную копию в своём профиле.</p>
             <div class="update-actions">
-              <button class="dialog-button focusable" id="background-choose">Выбрать изображение</button>
-              <button class="dialog-button secondary focusable" id="background-clear" disabled>Сбросить фон</button>
+              <button class="dialog-button focusable" id="background-choose" data-i18n="chooseImage">Выбрать изображение</button>
+              <button class="dialog-button secondary focusable" id="background-clear" disabled data-i18n="resetBackground">Сбросить фон</button>
             </div>
           </div>
         </div>
       </section>
       <section class="settings-section">
-        <div class="settings-heading"><div><p class="eyebrow">Приложения</p><h3>Мои приложения</h3></div></div>
+        <div class="settings-heading"><div><p class="eyebrow" data-i18n="apps">Приложения</p><h3 data-i18n="myApps">Мои приложения</h3></div></div>
         <p class="panel-description">Здесь можно удалить добавленные вами сайты и системные приложения. Встроенные плитки защищены.</p>
         <div class="manage-list" id="manage-list"></div>
       </section>
-      <div class="panel-actions"><button class="dialog-button focusable" data-manage-close>Готово</button></div>
+      <div class="panel-actions"><button class="dialog-button focusable" data-manage-close data-i18n="done">Готово</button></div>
     </section>
   </div>
+
+  <section class="onscreen-keyboard" id="onscreen-keyboard" aria-label="Экранная клавиатура" hidden>
+    <div class="keyboard-heading"><strong id="keyboard-language">Русский</strong><button class="keyboard-close focusable" id="keyboard-close" aria-label="Закрыть">×</button></div>
+    <div class="keyboard-keys" id="keyboard-keys"></div>
+  </section>
 
   <div class="toast" id="toast" role="status"></div>
   <script src="launcher.js"></script>

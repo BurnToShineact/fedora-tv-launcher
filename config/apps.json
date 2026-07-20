@@ -1,8 +1,8 @@
 [
-  {"id":"youtube","title":"YouTube","url":"https://www.youtube.com/tv","icon":"YT","accent":"#ff3b30"},
-  {"id":"vkvideo","title":"VK Видео","url":"https://vkvideo.ru","icon":"VK","accent":"#2688eb"},
-  {"id":"rutube","title":"Rutube","url":"https://rutube.ru","icon":"RT","accent":"#111827"},
-  {"id":"twitch","title":"Twitch","url":"https://www.twitch.tv","icon":"TW","accent":"#9146ff"},
-  {"id":"browser","title":"Браузер","url":"https://www.google.com","icon":"WEB","accent":"#0f766e"},
-  {"id":"settings","title":"Настройки","action":"settings","icon":"⚙","accent":"#475569"}
+  {"id":"youtube","title":"YouTube","url":"https://www.youtube.com/tv","icon":"YT","iconPath":"youtube.svg","accent":"#ff3b30"},
+  {"id":"vkvideo","title":"VK Видео","titleEn":"VK Video","url":"https://vkvideo.ru","icon":"VK","iconPath":"vk.svg","accent":"#2688eb"},
+  {"id":"rutube","title":"Rutube","url":"https://rutube.ru","icon":"RT","iconPath":"rutube.svg","accent":"#111827"},
+  {"id":"twitch","title":"Twitch","url":"https://www.twitch.tv","icon":"TW","iconPath":"twitch.svg","accent":"#9146ff"},
+  {"id":"browser","title":"Браузер","titleEn":"Browser","url":"https://www.google.com","icon":"WEB","iconPath":"google.svg","accent":"#0f766e"},
+  {"id":"settings","title":"Настройки","titleEn":"Settings","action":"settings","icon":"⚙","iconPath":"fedora.svg","accent":"#475569"}
 ]

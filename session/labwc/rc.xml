@@ -47,5 +47,8 @@
     <windowRule identifier="*" serverDecoration="no">
       <action name="Maximize" />
     </windowRule>
+    <windowRule title="Fedora TV Return" serverDecoration="no">
+      <action name="Unmaximize" />
+    </windowRule>
   </windowRules>
 </labwc_config>

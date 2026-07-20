@@ -6,7 +6,9 @@ const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
 let browserView;
+let externalControlWindow;
 let browserVisible = false;
+let keyboardVisible = false;
 let updateState = { status: 'idle', version: app.getVersion(), progress: 0, message: '' };
 let updateCheckInProgress = false;
 let downloadedUpdatePath = null;
@@ -17,6 +19,7 @@ const isDev = process.argv.includes('--dev');
 const isTvSession = process.argv.includes('--tv-session') || process.env.FEDORA_TV_SESSION === '1';
 const updatesEnabled = app.isPackaged;
 const BROWSER_TOOLBAR_HEIGHT = 82;
+const KEYBOARD_HEIGHT = 292;
 
 
 function sendUpdateState(patch = {}) {
@@ -168,6 +171,25 @@ function bundledAppsPath() {
   return path.join(__dirname, '..', 'config', 'apps.json');
 }
 
+function settingsPath() {
+  return path.join(app.getPath('userData'), 'settings.json');
+}
+
+function readSettings() {
+  try {
+    return { language: 'ru', ...JSON.parse(fs.readFileSync(settingsPath(), 'utf8')) };
+  } catch {
+    return { language: 'ru' };
+  }
+}
+
+function writeSettings(patch) {
+  const settings = { ...readSettings(), ...patch };
+  fs.mkdirSync(path.dirname(settingsPath()), { recursive: true });
+  fs.writeFileSync(settingsPath(), JSON.stringify(settings, null, 2), 'utf8');
+  return settings;
+}
+
 function backgroundPath() {
   return path.join(app.getPath('userData'), 'background.jpg');
 }
@@ -279,8 +301,34 @@ function readDesktopEntry(filePath) {
   if (!title) return null;
   return {
     title: title.trim().slice(0, 64),
-    description: (values[`GenericName[${locale}]`] || values[`GenericName[${language}]`] || values.GenericName || '').trim().slice(0, 100)
+    description: (values[`GenericName[${locale}]`] || values[`GenericName[${language}]`] || values.GenericName || '').trim().slice(0, 100),
+    iconName: (values.Icon || '').trim()
   };
+}
+
+function resolveDesktopIcon(iconName) {
+  if (!iconName) return null;
+  const candidates = [];
+  if (path.isAbsolute(iconName)) candidates.push(iconName);
+  const names = path.extname(iconName) ? [iconName] : [`${iconName}.svg`, `${iconName}.png`, `${iconName}.xpm`];
+  const themes = ['hicolor', 'Adwaita', 'HighContrast'];
+  for (const root of desktopDataRoots()) {
+    for (const theme of themes) {
+      for (const size of ['256x256', '128x128', '64x64', '48x48', 'scalable']) {
+        for (const name of names) candidates.push(path.join(root, 'icons', theme, size, 'apps', name));
+      }
+    }
+    for (const name of names) candidates.push(path.join(root, 'pixmaps', name));
+  }
+  const iconPath = candidates.find((candidate) => fs.existsSync(candidate));
+  if (!iconPath) return null;
+  try {
+    const image = nativeImage.createFromPath(iconPath);
+    if (image.isEmpty()) return null;
+    return image.resize({ width: 96, height: 96, quality: 'best' }).toDataURL();
+  } catch {
+    return null;
+  }
 }
 
 function installedDesktopApps() {
@@ -304,7 +352,7 @@ function installedDesktopApps() {
       if (results.has(desktopId)) continue;
       const parsed = readDesktopEntry(filePath);
       if (!parsed) continue;
-      results.set(desktopId, { desktopId, filePath, ...parsed });
+      results.set(desktopId, { desktopId, filePath, ...parsed, iconDataUrl: resolveDesktopIcon(parsed.iconName) });
     }
   };
 
@@ -334,7 +382,8 @@ function sendBrowserState(extra = {}) {
 function resizeBrowserView() {
   if (!mainWindow || !browserView || !browserVisible) return;
   const [width, height] = mainWindow.getContentSize();
-  browserView.setBounds({ x: 0, y: BROWSER_TOOLBAR_HEIGHT, width, height: Math.max(1, height - BROWSER_TOOLBAR_HEIGHT) });
+  const keyboardHeight = keyboardVisible ? KEYBOARD_HEIGHT : 0;
+  browserView.setBounds({ x: 0, y: BROWSER_TOOLBAR_HEIGHT, width, height: Math.max(1, height - BROWSER_TOOLBAR_HEIGHT - keyboardHeight) });
 }
 
 function ensureBrowserView() {
@@ -389,6 +438,8 @@ function ensureBrowserView() {
 
 function showLauncher() {
   browserVisible = false;
+  keyboardVisible = false;
+  externalControlWindow?.hide();
   if (systemAppMode) {
     globalShortcut.unregister('Home');
     systemAppMode = false;
@@ -400,6 +451,36 @@ function showLauncher() {
   mainWindow?.webContents.focus();
   sendBrowserState({ visible: false });
   mainWindow?.webContents.send('launcher:home');
+}
+
+function showExternalControl() {
+  if (!externalControlWindow || externalControlWindow.isDestroyed()) {
+    externalControlWindow = new BrowserWindow({
+      title: 'Fedora TV Return',
+      width: 210,
+      height: 64,
+      x: 24,
+      y: 24,
+      frame: false,
+      transparent: true,
+      resizable: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      focusable: true,
+      webPreferences: {
+        preload: path.join(__dirname, 'external-preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true
+      }
+    });
+    externalControlWindow.setAlwaysOnTop(true, 'screen-saver');
+    externalControlWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    externalControlWindow.loadFile(rendererPath('external-control.html'));
+    externalControlWindow.on('closed', () => { externalControlWindow = null; });
+  }
+  externalControlWindow.show();
+  externalControlWindow.moveTop();
 }
 
 function requestLauncherAction(action) {
@@ -441,6 +522,8 @@ function createWindow() {
   mainWindow.on('closed', () => {
     browserView?.webContents.close();
     browserView = null;
+    externalControlWindow?.close();
+    externalControlWindow = null;
     mainWindow = null;
   });
 
@@ -538,6 +621,7 @@ ipcMain.handle('system-apps:add', (_event, desktopId) => {
     desktopId,
     type: 'system',
     icon: makeIcon(installedApp.title),
+    iconDataUrl: installedApp.iconDataUrl,
     accent: accentForDesktopId(desktopId),
     custom: true
   });
@@ -575,6 +659,7 @@ ipcMain.handle('app:open', async (_event, selectedApp) => {
     systemAppMode = true;
     globalShortcut.register('Home', showLauncher);
     mainWindow?.minimize();
+    showExternalControl();
     return { ...result, external: true };
   }
   if (!/^https:\/\//i.test(storedApp.url || '')) return { ok: false, message: 'Разрешены только HTTPS-адреса' };
@@ -601,6 +686,25 @@ ipcMain.handle('browser:refresh', () => { browserView?.webContents.reload(); ret
 ipcMain.handle('browser:focus', () => {
   if (!browserView || !browserVisible) return false;
   browserView.webContents.focus();
+  return true;
+});
+ipcMain.handle('browser:keyboard', (_event, visible) => {
+  keyboardVisible = Boolean(visible);
+  resizeBrowserView();
+  return keyboardVisible;
+});
+ipcMain.handle('keyboard:input', (_event, input) => {
+  if (!browserView || !browserVisible || browserView.webContents.isDestroyed()) return false;
+  const value = String(input || '');
+  if (value === 'Backspace') {
+    browserView.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Backspace' });
+    browserView.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Backspace' });
+  } else if (value === 'Enter') {
+    browserView.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
+    browserView.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
+  } else {
+    browserView.webContents.insertText(value);
+  }
   return true;
 });
 ipcMain.handle('media:action', (_event, action) => {
@@ -634,6 +738,73 @@ ipcMain.handle('system:action', async (_event, action) => {
   if (action === 'mute') return runSystemCommand('wpctl', ['set-mute', '@DEFAULT_AUDIO_SINK@', 'toggle']);
   return { ok: false, message: 'Неизвестное действие' };
 });
+
+function parseVolume(output) {
+  const match = String(output).match(/Volume:\s+([0-9.]+)/i);
+  return { volume: match ? Math.round(Number(match[1]) * 100) : 0, muted: /\[MUTED\]/i.test(output) };
+}
+
+function splitNmcliLine(line) {
+  const values = [];
+  let value = '';
+  let escaped = false;
+  for (const character of line) {
+    if (escaped) { value += character; escaped = false; }
+    else if (character === '\\') escaped = true;
+    else if (character === ':') { values.push(value); value = ''; }
+    else value += character;
+  }
+  values.push(value);
+  return values;
+}
+
+async function getAudioState() {
+  const result = await runSystemCommand('wpctl', ['get-volume', '@DEFAULT_AUDIO_SINK@']);
+  return result.ok ? { ok: true, ...parseVolume(result.message) } : result;
+}
+
+async function getWifiState(rescan = false) {
+  const enabledResult = await runSystemCommand('nmcli', ['-t', '-f', 'WIFI', 'general']);
+  const listResult = await runSystemCommand('nmcli', ['-t', '--escape', 'yes', '-f', 'IN-USE,SSID,SIGNAL,SECURITY', 'device', 'wifi', 'list', '--rescan', rescan ? 'yes' : 'auto']);
+  if (!listResult.ok) return listResult;
+  const networks = listResult.message.split(/\r?\n/).filter(Boolean).map((line) => {
+    const [active, ssid, signal, security] = splitNmcliLine(line);
+    return { active: active === '*', ssid, signal: Number(signal) || 0, secure: Boolean(security && security !== '--') };
+  }).filter((network) => network.ssid).filter((network, index, all) => all.findIndex((item) => item.ssid === network.ssid) === index).sort((a, b) => Number(b.active) - Number(a.active) || b.signal - a.signal);
+  return { ok: true, enabled: /enabled/i.test(enabledResult.message), networks };
+}
+
+ipcMain.handle('settings:get', async () => ({
+  ok: true,
+  preferences: readSettings(),
+  audio: await getAudioState(),
+  wifi: await getWifiState(false)
+}));
+ipcMain.handle('audio:set-volume', async (_event, volume) => {
+  const safeVolume = Math.max(0, Math.min(100, Number(volume) || 0));
+  const result = await runSystemCommand('wpctl', ['set-volume', '@DEFAULT_AUDIO_SINK@', `${safeVolume}%`]);
+  return result.ok ? getAudioState() : result;
+});
+ipcMain.handle('audio:toggle-mute', async () => {
+  const result = await runSystemCommand('wpctl', ['set-mute', '@DEFAULT_AUDIO_SINK@', 'toggle']);
+  return result.ok ? getAudioState() : result;
+});
+ipcMain.handle('wifi:scan', () => getWifiState(true));
+ipcMain.handle('wifi:toggle', async (_event, enabled) => {
+  const result = await runSystemCommand('nmcli', ['radio', 'wifi', enabled ? 'on' : 'off']);
+  return result.ok ? getWifiState(Boolean(enabled)) : result;
+});
+ipcMain.handle('wifi:connect', async (_event, candidate) => {
+  const ssid = String(candidate?.ssid || '').slice(0, 128);
+  const password = String(candidate?.password || '').slice(0, 256);
+  if (!ssid) return { ok: false, message: 'Сеть не выбрана' };
+  const args = ['device', 'wifi', 'connect', ssid];
+  if (password) args.push('password', password);
+  const result = await runSystemCommand('nmcli', args);
+  return result.ok ? getWifiState(false) : result;
+});
+ipcMain.handle('language:set', (_event, language) => writeSettings({ language: language === 'en' ? 'en' : 'ru' }));
+ipcMain.on('external:home', showLauncher);
 
 
 ipcMain.handle('app:get-info', () => ({
