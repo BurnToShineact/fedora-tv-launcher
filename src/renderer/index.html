@@ -32,6 +32,22 @@
     <button class="notice-button primary focusable" id="update-notice-action" hidden>Установить</button>
     <button class="notice-button focusable" id="update-notice-later">Позже</button>
   </aside>
+  <div class="update-visual-backdrop" id="update-visual" hidden>
+    <section class="update-visual" role="status" aria-live="polite">
+      <div class="update-orbit" id="update-orbit"><span>↑</span></div>
+      <p class="eyebrow">Fedora TV OS</p>
+      <h2 id="update-visual-title">Устанавливаем обновление</h2>
+      <p id="update-visual-message">Подготовка…</p>
+      <div class="visual-progress"><span id="update-visual-bar"></span></div>
+      <strong class="visual-percent" id="update-visual-percent">0%</strong>
+      <div class="update-stages">
+        <span data-update-stage="authorization">1 <b>Подтверждение</b></span>
+        <span data-update-stage="installation">2 <b>Установка</b></span>
+        <span data-update-stage="restart">3 <b>Перезапуск</b></span>
+      </div>
+      <small>Не выключайте устройство во время установки.</small>
+    </section>
+  </div>
   <main class="launcher" id="launcher">
     <header class="topbar">
       <div class="brand">

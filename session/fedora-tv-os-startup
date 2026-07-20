@@ -1,0 +1,10 @@
+#!/usr/bin/bash
+set -eu
+
+# labwc запускает этот файл уже после создания Wayland-сокета, поэтому
+# PolicyKit-агент может показать системное окно авторизации поверх оболочки.
+if [ -x /usr/libexec/lxqt-policykit-agent ]; then
+  /usr/libexec/lxqt-policykit-agent >/dev/null 2>&1 &
+fi
+
+exec /usr/bin/fedora-tv-os --tv-session

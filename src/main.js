@@ -1,7 +1,7 @@
 const { app, BrowserWindow, WebContentsView, ipcMain, globalShortcut, session, dialog, nativeImage } = require('electron');
 const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
@@ -109,40 +109,97 @@ async function installDownloadedRpm() {
 
   updateInstallInProgress = true;
   writeUpdateLog('info', `Installing downloaded RPM: ${rpmPath}`);
-  sendUpdateState({ status: 'installing', message: 'Подтвердите установку в системном окне Fedora…' });
+  sendUpdateState({ status: 'installing', stage: 'authorization', progress: 8, message: 'Подготавливаем системное окно подтверждения…' });
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.setKiosk(false);
     mainWindow.setFullScreen(false);
-    mainWindow.minimize();
+    mainWindow.show();
+    mainWindow.focus();
   }
+
+  const agentReady = await ensurePolicyKitAgent();
+  if (!agentReady) {
+    updateInstallInProgress = false;
+    restoreKioskWindow();
+    const message = 'Не найден графический агент Fedora для запроса пароля. Установите пакет lxqt-policykit и войдите в TV-сессию заново.';
+    sendUpdateState({ status: 'downloaded', stage: 'error', progress: 0, message });
+    return { ok: false, message };
+  }
+
+  sendUpdateState({ status: 'installing', stage: 'authorization', progress: 15, message: 'Подтвердите обновление в системном окне Fedora.' });
 
   const result = await new Promise((resolve) => {
     const pkexecPath = fs.existsSync('/usr/bin/pkexec') ? '/usr/bin/pkexec' : 'pkexec';
     const dnfPath = fs.existsSync('/usr/bin/dnf') ? '/usr/bin/dnf' : 'dnf';
-    execFile(pkexecPath, [dnfPath, 'install', '--nogpgcheck', '-y', rpmPath], { timeout: 15 * 60 * 1000 }, (error, stdout, stderr) => {
-      if (error) resolve({ ok: false, message: String(stderr || error.message).trim() });
-      else resolve({ ok: true, message: String(stdout || '').trim() });
-    });
+    const child = spawn(pkexecPath, [dnfPath, 'install', '--nogpgcheck', '-y', rpmPath], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    let installProgress = 28;
+    let installationStarted = false;
+    const handleOutput = (chunk, isError = false) => {
+      const text = String(chunk);
+      if (isError) stderr += text;
+      else stdout += text;
+      writeUpdateLog(isError ? 'warn' : 'info', text);
+      if (isError) return;
+      if (!installationStarted) {
+        installationStarted = true;
+        sendUpdateState({ status: 'installing', stage: 'installation', progress: installProgress, message: 'Разрешение получено. Устанавливаем пакет…' });
+      } else {
+        installProgress = Math.min(90, installProgress + 4);
+        sendUpdateState({ status: 'installing', stage: 'installation', progress: installProgress, message: installProgress > 72 ? 'Завершаем установку…' : 'Обновляем компоненты Fedora TV OS…' });
+      }
+    };
+    child.stdout.on('data', (chunk) => handleOutput(chunk));
+    child.stderr.on('data', (chunk) => handleOutput(chunk, true));
+    child.on('error', (error) => resolve({ ok: false, message: error.message }));
+    child.on('close', (code) => resolve(code === 0
+      ? { ok: true, message: stdout.trim() }
+      : { ok: false, message: String(stderr || stdout || `pkexec завершился с кодом ${code}`).trim() }));
+    const timeout = setTimeout(() => {
+      child.kill('SIGTERM');
+      resolve({ ok: false, message: 'Превышено время ожидания подтверждения или установки.' });
+    }, 15 * 60 * 1000);
+    child.once('close', () => clearTimeout(timeout));
   });
 
   updateInstallInProgress = false;
   if (!result.ok) {
     writeUpdateLog('error', result.message);
     restoreKioskWindow();
-    const message = /dismissed|cancel|not authorized/i.test(result.message)
+    const message = /dismissed|cancel|not authorized|authentication.*failed/i.test(result.message)
       ? 'Установка отменена. Её можно запустить позже из настроек.'
+      : /authentication agent|no session for cookie/i.test(result.message)
+        ? 'Системное окно подтверждения не запустилось. Перезапустите TV-сессию и попробуйте снова.'
       : `Не удалось установить обновление: ${result.message}`;
-    sendUpdateState({ status: 'downloaded', message });
+    sendUpdateState({ status: 'downloaded', stage: 'error', progress: 0, message });
     return { ok: false, message };
   }
 
   writeUpdateLog('info', 'RPM installation completed successfully');
-  sendUpdateState({ status: 'installed', message: 'Обновление установлено. Перезапускаем Fedora TV…' });
+  sendUpdateState({ status: 'installed', stage: 'restart', progress: 100, message: 'Обновление установлено. Перезапускаем Fedora TV…' });
   setTimeout(() => {
     app.relaunch();
     app.quit();
   }, 800);
   return { ok: true };
+}
+
+async function ensurePolicyKitAgent() {
+  if (!isTvSession) return true;
+  const agentPath = '/usr/libexec/lxqt-policykit-agent';
+  if (!fs.existsSync(agentPath)) return false;
+  const running = await runSystemCommand('pgrep', ['-u', String(process.getuid()), '-f', agentPath]);
+  if (running.ok) return true;
+  try {
+    const agent = spawn(agentPath, [], { detached: true, stdio: 'ignore' });
+    agent.unref();
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    return true;
+  } catch (error) {
+    writeUpdateLog('error', error);
+    return false;
+  }
 }
 
 async function checkForUpdates() {

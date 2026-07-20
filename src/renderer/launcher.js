@@ -15,6 +15,12 @@ const updateNoticeProgress = document.getElementById('update-notice-progress');
 const updateNoticeProgressBar = document.getElementById('update-notice-progress-bar');
 const updateNoticeAction = document.getElementById('update-notice-action');
 const updateNoticeLater = document.getElementById('update-notice-later');
+const updateVisual = document.getElementById('update-visual');
+const updateVisualTitle = document.getElementById('update-visual-title');
+const updateVisualMessage = document.getElementById('update-visual-message');
+const updateVisualBar = document.getElementById('update-visual-bar');
+const updateVisualPercent = document.getElementById('update-visual-percent');
+const updateOrbit = document.getElementById('update-orbit');
 const clock = document.getElementById('clock');
 const dateLabel = document.getElementById('date');
 const backdrop = document.getElementById('dialog-backdrop');
@@ -163,8 +169,34 @@ function renderUpdateState(state = {}) {
   updateNoticeAction.hidden = !['downloaded', 'error'].includes(status);
   updateNoticeAction.textContent = status === 'error' ? 'Повторить' : 'Установить';
   updateNoticeLater.hidden = status === 'installing';
+  renderUpdateVisual(state);
   if (noticeWasHidden !== updateNotice.hidden && !activeOverlay() && !launcher.hidden) refreshFocusableCache();
   if (!manageBackdrop.hidden) refreshFocusables(Math.min(focusIndex, Math.max(0, focusables.length - 1)));
+}
+
+function renderUpdateVisual(state = {}) {
+  const visible = ['installing', 'installed'].includes(state.status);
+  updateVisual.hidden = !visible;
+  if (!visible) return;
+  const progress = Math.max(0, Math.min(100, Number(state.progress) || 0));
+  const stage = state.status === 'installed' ? 'restart' : (state.stage || 'authorization');
+  const stageOrder = ['authorization', 'installation', 'restart'];
+  const activeIndex = stageOrder.indexOf(stage);
+  updateVisualBar.style.width = `${progress}%`;
+  updateVisualPercent.textContent = `${progress}%`;
+  updateVisualMessage.textContent = state.message || 'Подготовка…';
+  updateVisualTitle.textContent = stage === 'authorization'
+    ? 'Подтверждаем обновление'
+    : stage === 'installation'
+      ? 'Устанавливаем обновление'
+      : 'Обновление готово';
+  updateOrbit.classList.toggle('complete', stage === 'restart');
+  updateOrbit.querySelector('span').textContent = stage === 'restart' ? '✓' : '↑';
+  updateVisual.querySelectorAll('[data-update-stage]').forEach((element) => {
+    const index = stageOrder.indexOf(element.dataset.updateStage);
+    element.classList.toggle('active', index === activeIndex);
+    element.classList.toggle('done', index < activeIndex);
+  });
 }
 
 function requestUpdateInstall() {

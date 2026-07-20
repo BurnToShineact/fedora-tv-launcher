@@ -7,5 +7,4 @@ export XDG_SESSION_TYPE=wayland
 export FEDORA_TV_SESSION=1
 export ELECTRON_OZONE_PLATFORM_HINT=auto
 
-exec /usr/bin/labwc -C /etc/fedora-tv-os/labwc -S "/usr/bin/fedora-tv-os --tv-session"
-
+exec /usr/bin/labwc -C /etc/fedora-tv-os/labwc -S "/usr/libexec/fedora-tv-os-startup"

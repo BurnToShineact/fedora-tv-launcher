@@ -13,8 +13,8 @@ else
 fi
 
 rm -f /usr/libexec/fedora-tv-os-session \
+  /usr/libexec/fedora-tv-os-startup \
   /usr/libexec/fedora-tv-os-home \
   /usr/libexec/fedora-tv-os-logout \
   /usr/share/wayland-sessions/fedora-tv-os.desktop
 rm -rf /etc/fedora-tv-os
-

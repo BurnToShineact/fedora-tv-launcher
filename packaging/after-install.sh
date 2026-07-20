@@ -24,6 +24,7 @@ fi
 
 # Register Fedora TV OS as a login session, not as a user application.
 install -Dm755 "$SESSION_SOURCE/fedora-tv-os-session" /usr/libexec/fedora-tv-os-session
+install -Dm755 "$SESSION_SOURCE/fedora-tv-os-startup" /usr/libexec/fedora-tv-os-startup
 install -Dm755 "$SESSION_SOURCE/fedora-tv-os-home" /usr/libexec/fedora-tv-os-home
 install -Dm755 "$SESSION_SOURCE/fedora-tv-os-logout" /usr/libexec/fedora-tv-os-logout
 install -Dm644 "$SESSION_SOURCE/fedora-tv-os.desktop" /usr/share/wayland-sessions/fedora-tv-os.desktop
@@ -33,7 +34,7 @@ install -Dm644 "$SESSION_SOURCE/labwc/menu.xml" /etc/fedora-tv-os/labwc/menu.xml
 install -Dm644 "$SESSION_SOURCE/labwc/themerc-override" /etc/fedora-tv-os/labwc/themerc-override
 
 if command -v restorecon >/dev/null 2>&1; then
-  restorecon -RF /usr/libexec/fedora-tv-os-session /usr/libexec/fedora-tv-os-home \
+  restorecon -RF /usr/libexec/fedora-tv-os-session /usr/libexec/fedora-tv-os-startup /usr/libexec/fedora-tv-os-home \
     /usr/libexec/fedora-tv-os-logout /usr/share/wayland-sessions/fedora-tv-os.desktop \
     /etc/fedora-tv-os || true
 fi
@@ -41,4 +42,3 @@ fi
 if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database /usr/share/applications || true
 fi
-
