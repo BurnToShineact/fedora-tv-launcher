@@ -1,4 +1,4 @@
-name: Build and release Fedora TV RPM
+name: Build and release RPM
 
 on:
   push:
@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -32,32 +32,31 @@ jobs:
 
       - name: Verify package version matches tag
         if: startsWith(github.ref, 'refs/tags/')
-        shell: bash
         run: |
-          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
           TAG_VERSION="${GITHUB_REF_NAME#v}"
+
+          echo "package.json: $PACKAGE_VERSION"
+          echo "Git tag:      $TAG_VERSION"
+
           if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
-            echo "Ошибка: package.json содержит версию $PACKAGE_VERSION, а тег — $GITHUB_REF_NAME"
+            echo "Версия package.json не совпадает с тегом"
             exit 1
           fi
 
       - name: Build RPM
-        run: npm run build:rpm
+        run: npm run build:rpm -- --publish never
 
       - name: Create or update GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release create "$GITHUB_REF_NAME" --title "Fedora TV ${GITHUB_REF_NAME#v}" --generate-notes
-          fi
-          gh release upload "$GITHUB_REF_NAME" dist/*.rpm --clobber
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.rpm
+          generate_release_notes: true
 
       - name: Upload RPM as workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: fedora-tv-rpm
+          name: fedora-tv-launcher-rpm
           path: dist/*.rpm
           if-no-files-found: error
