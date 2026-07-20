@@ -11,6 +11,9 @@ const manageBackdrop = document.getElementById('manage-backdrop');
 const addForm = document.getElementById('add-app-form');
 const titleInput = document.getElementById('app-title');
 const urlInput = document.getElementById('app-url');
+const systemAppPicker = document.getElementById('system-app-picker');
+const systemAppList = document.getElementById('system-app-list');
+const systemAppRefresh = document.getElementById('system-app-refresh');
 const manageList = document.getElementById('manage-list');
 const toast = document.getElementById('toast');
 const appVersion = document.getElementById('app-version');
@@ -62,9 +65,9 @@ function showToast(message) {
 }
 
 function activeOverlay() {
+  if (!backdrop.hidden) return backdrop;
   if (!addBackdrop.hidden) return addBackdrop;
   if (!manageBackdrop.hidden) return manageBackdrop;
-  if (!backdrop.hidden) return backdrop;
   return null;
 }
 
@@ -127,13 +130,26 @@ function closeConfirm() {
   refreshFocusables(previousFocusIndex);
 }
 
+function setAddMode(mode) {
+  const systemMode = mode === 'system';
+  addForm.hidden = systemMode;
+  systemAppPicker.hidden = !systemMode;
+  document.querySelectorAll('[data-add-mode]').forEach((button) => {
+    const selected = button.dataset.addMode === mode;
+    button.classList.toggle('selected', selected);
+    button.setAttribute('aria-selected', String(selected));
+  });
+  refreshFocusables(0);
+  if (systemMode) loadSystemApps();
+}
+
 function openAddPanel() {
   previousFocusIndex = focusIndex;
   addForm.reset();
   selectedColor = '#2563eb';
   document.querySelectorAll('.color-choice').forEach((button, index) => button.classList.toggle('selected', index === 0));
   addBackdrop.hidden = false;
-  refreshFocusables(0);
+  setAddMode('web');
   titleInput.focus();
 }
 
@@ -142,11 +158,55 @@ function closeAddPanel() {
   refreshFocusables(previousFocusIndex);
 }
 
+async function addInstalledApp(installedApp) {
+  const result = await window.tv.addSystemApp(installedApp.desktopId);
+  if (!result?.ok) return showToast(result?.message || 'Не удалось добавить приложение');
+  appsCache = result.apps;
+  closeAddPanel();
+  await renderApps();
+  refreshFocusables(Math.max(0, appsCache.length - 1));
+  showToast(`«${installedApp.title}» добавлено`);
+}
+
+async function loadSystemApps() {
+  systemAppList.innerHTML = '<div class="empty-state">Ищем установленные приложения…</div>';
+  try {
+    const installedApps = await window.tv.getSystemApps();
+    systemAppList.innerHTML = '';
+    if (!installedApps.length) {
+      systemAppList.innerHTML = '<div class="empty-state">Подходящие приложения не найдены.</div>';
+      refreshFocusables(0);
+      return;
+    }
+    for (const installedApp of installedApps) {
+      const row = document.createElement('div');
+      row.className = 'system-app-row';
+      row.innerHTML = `
+        <div class="manage-icon" style="--accent:#334155"></div>
+        <div class="manage-copy"><strong></strong><span></span></div>
+        <button type="button" class="system-add-button focusable"></button>`;
+      row.querySelector('.manage-icon').textContent = installedApp.title.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+      row.querySelector('strong').textContent = installedApp.title;
+      row.querySelector('.manage-copy span').textContent = installedApp.description;
+      const addButton = row.querySelector('.system-add-button');
+      addButton.textContent = installedApp.added ? 'Добавлено' : 'Добавить';
+      addButton.disabled = installedApp.added;
+      addButton.addEventListener('click', () => addInstalledApp(installedApp));
+      systemAppList.appendChild(row);
+    }
+    refreshFocusables(0);
+  } catch (error) {
+    systemAppList.innerHTML = '<div class="empty-state">Не удалось прочитать список приложений.</div>';
+    showToast(error.message);
+    refreshFocusables(0);
+  }
+}
+
 function renderManageList() {
   const customApps = appsCache.filter((app) => app.custom);
   manageList.innerHTML = '';
   if (!customApps.length) {
-    manageList.innerHTML = '<div class="empty-state">Вы ещё не добавили собственные веб-приложения.</div>';
+    manageList.innerHTML = '<div class="empty-state">Вы ещё не добавили собственные приложения.</div>';
     return;
   }
   for (const app of customApps) {
@@ -157,7 +217,7 @@ function renderManageList() {
       <div class="manage-copy"><strong></strong><span></span></div>
       <button class="delete-button focusable">Удалить</button>`;
     row.querySelector('strong').textContent = app.title;
-    row.querySelector('.manage-copy span').textContent = app.url;
+    row.querySelector('.manage-copy span').textContent = app.type === 'system' ? 'Системное приложение' : app.url;
     row.querySelector('.delete-button').addEventListener('click', () => requestDelete(app));
     manageList.appendChild(row);
   }
@@ -176,7 +236,8 @@ function closeManagePanel() {
 }
 
 function requestDelete(app) {
-  openConfirm('Удалить приложение?', `Плитка «${app.title}» будет удалена. Данные входа на сайте останутся в профиле браузера.`, 'Удалить', async () => {
+  const detail = app.type === 'system' ? 'Само приложение останется установленным в системе.' : 'Данные входа на сайте останутся в профиле браузера.';
+  openConfirm('Удалить приложение?', `Плитка «${app.title}» будет удалена. ${detail}`, 'Удалить', async () => {
     const result = await window.tv.deleteApp(app.id);
     closeConfirm();
     if (!result?.ok) return showToast(result?.message || 'Не удалось удалить приложение');
@@ -214,6 +275,7 @@ async function renderApps() {
   for (const app of appsCache) {
     const button = document.createElement('button');
     button.className = 'app-card focusable';
+    button.style.setProperty('--card-index', grid.children.length);
     button.style.setProperty('--accent', app.accent || '#334155');
     button.dataset.app = JSON.stringify(app);
     button.innerHTML = '<span class="icon"></span><span class="title"></span>';
@@ -224,6 +286,7 @@ async function renderApps() {
   }
   const addButton = document.createElement('button');
   addButton.className = 'app-card add-card focusable';
+  addButton.style.setProperty('--card-index', grid.children.length);
   addButton.dataset.special = 'add';
   addButton.innerHTML = '<span class="icon">＋</span><span class="title">Добавить приложение</span>';
   addButton.addEventListener('click', () => activate(addButton));
@@ -234,6 +297,8 @@ async function loadApps() {
   await renderApps();
   document.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', () => activate(button)));
   document.querySelectorAll('[data-add-close]').forEach((button) => button.addEventListener('click', closeAddPanel));
+  document.querySelectorAll('[data-add-mode]').forEach((button) => button.addEventListener('click', () => setAddMode(button.dataset.addMode)));
+  systemAppRefresh.addEventListener('click', loadSystemApps);
   document.querySelectorAll('[data-manage-close]').forEach((button) => button.addEventListener('click', closeManagePanel));
   dialogCancel.addEventListener('click', closeConfirm);
   dialogConfirm.addEventListener('click', async () => { if (confirmHandler) await confirmHandler(); });

@@ -100,6 +100,92 @@ function makeIcon(title) {
   return title.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase().slice(0, 3);
 }
 
+function desktopDataRoots() {
+  const home = app.getPath('home');
+  const roots = [
+    process.env.XDG_DATA_HOME || path.join(home, '.local', 'share'),
+    ...String(process.env.XDG_DATA_DIRS || '/usr/local/share:/usr/share').split(path.delimiter),
+    path.join(home, '.local', 'share', 'flatpak', 'exports', 'share'),
+    '/var/lib/flatpak/exports/share',
+    '/var/lib/snapd/desktop'
+  ];
+  return [...new Set(roots.filter(Boolean))];
+}
+
+function unescapeDesktopValue(value) {
+  return value.replace(/\\s/g, ' ').replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\r/g, '\r').replace(/\\\\/g, '\\');
+}
+
+function readDesktopEntry(filePath) {
+  let contents;
+  try {
+    contents = fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return null;
+  }
+
+  const values = {};
+  let inDesktopEntry = false;
+  for (const rawLine of contents.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (line.startsWith('[')) {
+      inDesktopEntry = line === '[Desktop Entry]';
+      continue;
+    }
+    if (!inDesktopEntry || !line || line.startsWith('#')) continue;
+    const separator = line.indexOf('=');
+    if (separator < 1) continue;
+    values[line.slice(0, separator)] = unescapeDesktopValue(line.slice(separator + 1));
+  }
+
+  if (values.Type !== 'Application' || values.Hidden === 'true' || values.NoDisplay === 'true') return null;
+  if (!values.Exec && values.DBusActivatable !== 'true') return null;
+  const locale = String(process.env.LC_MESSAGES || process.env.LANG || 'ru_RU').split('.')[0];
+  const language = locale.split('_')[0];
+  const title = values[`Name[${locale}]`] || values[`Name[${language}]`] || values.Name;
+  if (!title) return null;
+  return {
+    title: title.trim().slice(0, 64),
+    description: (values[`GenericName[${locale}]`] || values[`GenericName[${language}]`] || values.GenericName || '').trim().slice(0, 100)
+  };
+}
+
+function installedDesktopApps() {
+  const results = new Map();
+  const visit = (directory, applicationsRoot, remainingDepth = 3) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(directory, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (results.size >= 2000) return;
+      const filePath = path.join(directory, entry.name);
+      if (entry.isDirectory() && remainingDepth > 0) {
+        visit(filePath, applicationsRoot, remainingDepth - 1);
+        continue;
+      }
+      if (!entry.name.endsWith('.desktop') || (!entry.isFile() && !entry.isSymbolicLink())) continue;
+      const desktopId = path.relative(applicationsRoot, filePath).split(path.sep).join('-');
+      if (results.has(desktopId)) continue;
+      const parsed = readDesktopEntry(filePath);
+      if (!parsed) continue;
+      results.set(desktopId, { desktopId, filePath, ...parsed });
+    }
+  };
+
+  for (const root of desktopDataRoots()) visit(path.join(root, 'applications'), path.join(root, 'applications'));
+  return [...results.values()].sort((a, b) => a.title.localeCompare(b.title, 'ru'));
+}
+
+function accentForDesktopId(desktopId) {
+  const colors = ['#2563eb', '#7c3aed', '#059669', '#ea580c', '#0f766e', '#475569'];
+  let hash = 0;
+  for (const character of desktopId) hash = ((hash * 31) + character.charCodeAt(0)) >>> 0;
+  return colors[hash % colors.length];
+}
+
 function sendBrowserState(extra = {}) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.webContents.send('browser:state', {
@@ -253,6 +339,31 @@ ipcMain.handle('apps:add', (_event, candidate) => {
   return { ok: true, apps };
 });
 
+ipcMain.handle('system-apps:get', () => {
+  const added = new Set(readApps().filter((item) => item.type === 'system').map((item) => item.desktopId));
+  return installedDesktopApps().map(({ filePath: _filePath, ...item }) => ({ ...item, added: added.has(item.desktopId) }));
+});
+
+ipcMain.handle('system-apps:add', (_event, desktopId) => {
+  const installedApp = installedDesktopApps().find((item) => item.desktopId === desktopId);
+  if (!installedApp) return { ok: false, message: 'Приложение больше не установлено в системе' };
+  const apps = readApps();
+  if (apps.some((item) => item.type === 'system' && item.desktopId === desktopId)) {
+    return { ok: false, message: 'Это приложение уже добавлено' };
+  }
+  apps.splice(Math.max(0, apps.findIndex((item) => item.action === 'settings')), 0, {
+    id: makeId(installedApp.title),
+    title: installedApp.title,
+    desktopId,
+    type: 'system',
+    icon: makeIcon(installedApp.title),
+    accent: accentForDesktopId(desktopId),
+    custom: true
+  });
+  writeApps(apps);
+  return { ok: true, apps };
+});
+
 ipcMain.handle('apps:delete', (_event, id) => {
   const apps = readApps();
   const target = apps.find((item) => item.id === id);
@@ -265,10 +376,17 @@ ipcMain.handle('apps:delete', (_event, id) => {
 
 ipcMain.handle('app:open', async (_event, selectedApp) => {
   if (!selectedApp || typeof selectedApp !== 'object') return { ok: false };
-  if (selectedApp.action === 'settings') return { ok: true, action: 'settings' };
-  if (!/^https:\/\//i.test(selectedApp.url || '')) return { ok: false, message: 'Разрешены только HTTPS-адреса' };
+  const storedApp = readApps().find((item) => item.id === selectedApp.id);
+  if (!storedApp) return { ok: false, message: 'Приложение не найдено' };
+  if (storedApp.action === 'settings') return { ok: true, action: 'settings' };
+  if (storedApp.type === 'system') {
+    const installedApp = installedDesktopApps().find((item) => item.desktopId === storedApp.desktopId);
+    if (!installedApp) return { ok: false, message: 'Приложение не найдено в системе' };
+    return runSystemCommand('gio', ['launch', installedApp.filePath]);
+  }
+  if (!/^https:\/\//i.test(storedApp.url || '')) return { ok: false, message: 'Разрешены только HTTPS-адреса' };
   try {
-    await openWebsite(selectedApp.url);
+    await openWebsite(storedApp.url);
     return { ok: true };
   } catch (error) {
     showLauncher();

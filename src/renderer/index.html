@@ -7,17 +7,18 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <div class="ambient" aria-hidden="true"><span></span><span></span><span></span></div>
   <main class="launcher" id="launcher">
     <header class="topbar">
       <div class="brand">
         <div class="brand-mark">F</div>
-        <div><strong>Fedora TV</strong><span>Веб-приложения</span></div>
+        <div><strong>Fedora TV</strong><span>Liquid Home</span></div>
       </div>
       <div class="status"><span id="date"></span><strong id="clock">00:00</strong></div>
     </header>
 
     <section class="hero">
-      <p class="eyebrow">Главный экран</p>
+      <p class="eyebrow">Домашний экран</p>
       <h1>Что будем смотреть?</h1>
       <p>Выберите приложение стрелками на пульте и нажмите OK.</p>
     </section>
@@ -47,8 +48,12 @@
   <div class="panel-backdrop" id="add-app-backdrop" hidden>
     <section class="panel" role="dialog" aria-modal="true" aria-labelledby="add-app-title">
       <div class="panel-header">
-        <div><p class="eyebrow">Новое веб-приложение</p><h2 id="add-app-title">Добавить приложение</h2></div>
+        <div><p class="eyebrow">Новая плитка</p><h2 id="add-app-title">Добавить приложение</h2></div>
         <button class="icon-button focusable" data-add-close aria-label="Закрыть">×</button>
+      </div>
+      <div class="source-tabs" role="tablist" aria-label="Источник приложения">
+        <button type="button" class="source-tab focusable selected" data-add-mode="web" role="tab" aria-selected="true">Веб-сайт</button>
+        <button type="button" class="source-tab focusable" data-add-mode="system" role="tab" aria-selected="false">Из системы</button>
       </div>
       <form id="add-app-form" class="app-form">
         <label>Название
@@ -74,6 +79,14 @@
           <button type="submit" class="dialog-button focusable">Добавить</button>
         </div>
       </form>
+      <section class="system-picker" id="system-app-picker" hidden>
+        <div class="picker-heading">
+          <p class="panel-description">Выберите программу, установленную в Fedora, Flatpak или Snap.</p>
+          <button type="button" class="dialog-button secondary focusable" id="system-app-refresh">Обновить список</button>
+        </div>
+        <div class="system-app-list" id="system-app-list" aria-live="polite"></div>
+        <div class="panel-actions"><button type="button" class="dialog-button secondary focusable" data-add-close>Закрыть</button></div>
+      </section>
     </section>
   </div>
 
@@ -97,8 +110,8 @@
         </div>
       </section>
       <section class="settings-section">
-        <div class="settings-heading"><div><p class="eyebrow">Приложения</p><h3>Мои веб-приложения</h3></div></div>
-        <p class="panel-description">Здесь можно удалить добавленные вами веб-приложения. Встроенные плитки защищены.</p>
+        <div class="settings-heading"><div><p class="eyebrow">Приложения</p><h3>Мои приложения</h3></div></div>
+        <p class="panel-description">Здесь можно удалить добавленные вами сайты и системные приложения. Встроенные плитки защищены.</p>
         <div class="manage-list" id="manage-list"></div>
       </section>
       <div class="panel-actions"><button class="dialog-button focusable" data-manage-close>Готово</button></div>
