@@ -1,0 +1,11 @@
+#!/usr/bin/bash
+set -eu
+
+export XDG_CURRENT_DESKTOP=FedoraTV
+export XDG_SESSION_DESKTOP=fedora-tv-os
+export XDG_SESSION_TYPE=wayland
+export FEDORA_TV_SESSION=1
+export ELECTRON_OZONE_PLATFORM_HINT=auto
+
+exec /usr/bin/labwc -C /etc/fedora-tv-os/labwc -S "/usr/bin/fedora-tv-os --tv-session"
+

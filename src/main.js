@@ -12,7 +12,10 @@ let updateCheckInProgress = false;
 let downloadedUpdatePath = null;
 let updateInstallInProgress = false;
 let systemAppMode = false;
+let pendingLauncherAction = process.argv.includes('--poweroff') ? 'poweroff' : null;
 const isDev = process.argv.includes('--dev');
+const isTvSession = process.argv.includes('--tv-session') || process.env.FEDORA_TV_SESSION === '1';
+const updatesEnabled = app.isPackaged;
 const BROWSER_TOOLBAR_HEIGHT = 82;
 
 
@@ -140,7 +143,7 @@ async function installDownloadedRpm() {
 }
 
 async function checkForUpdates() {
-  if (!app.isPackaged) {
+  if (!updatesEnabled) {
     sendUpdateState({ status: 'dev', message: 'Проверка обновлений доступна в установленной сборке приложения.' });
     return updateState;
   }
@@ -367,6 +370,17 @@ function ensureBrowserView() {
       event.preventDefault();
       if (browserView.webContents.canGoBack()) browserView.webContents.goBack();
       else showLauncher();
+      return;
+    }
+    if (['ContextMenu', 'Menu', 'Apps', 'F10'].includes(key) && input.type === 'keyDown') {
+      event.preventDefault();
+      mainWindow?.webContents.focus();
+      mainWindow?.webContents.send('browser:toolbar');
+      return;
+    }
+    if (['Power', 'PowerOff', 'XF86PowerOff'].includes(key) && input.type === 'keyDown') {
+      event.preventDefault();
+      requestLauncherAction('poweroff');
     }
   });
 
@@ -384,8 +398,13 @@ function showLauncher() {
   }
   restoreKioskWindow();
   mainWindow?.webContents.focus();
-  mainWindow?.webContents.send('launcher:home');
   sendBrowserState({ visible: false });
+  mainWindow?.webContents.send('launcher:home');
+}
+
+function requestLauncherAction(action) {
+  showLauncher();
+  setTimeout(() => mainWindow?.webContents.send('launcher:system-action', action), 50);
 }
 
 async function openWebsite(url) {
@@ -400,6 +419,7 @@ async function openWebsite(url) {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
+    title: 'Fedora TV OS',
     width: 1280,
     height: 720,
     minWidth: 960,
@@ -436,15 +456,30 @@ function runSystemCommand(command, args = []) {
   });
 }
 
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (_event, argv) => {
+    if (argv.includes('--poweroff')) requestLauncherAction('poweroff');
+    else if (argv.includes('--home') || argv.includes('--tv-session')) showLauncher();
+  });
+
 app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
-  configureUpdater();
+  if (updatesEnabled) configureUpdater();
   createWindow();
   mainWindow.webContents.once('did-finish-load', () => {
     sendUpdateState();
-    setTimeout(() => checkForUpdates(), 5000);
+    if (pendingLauncherAction) {
+      const action = pendingLauncherAction;
+      pendingLauncherAction = null;
+      setTimeout(() => requestLauncherAction(action), 50);
+    }
+    if (updatesEnabled) setTimeout(() => checkForUpdates(), 5000);
   });
-  setInterval(() => checkForUpdates(), 60 * 60 * 1000);
+  if (updatesEnabled) setInterval(() => checkForUpdates(), 60 * 60 * 1000);
 
   globalShortcut.register('Super+Home', showLauncher);
   globalShortcut.register('CommandOrControl+Alt+H', showLauncher);
@@ -453,6 +488,7 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
+}
 
 app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
@@ -562,6 +598,24 @@ ipcMain.handle('browser:back', () => {
 });
 ipcMain.handle('browser:home', () => { showLauncher(); return true; });
 ipcMain.handle('browser:refresh', () => { browserView?.webContents.reload(); return true; });
+ipcMain.handle('browser:focus', () => {
+  if (!browserView || !browserVisible) return false;
+  browserView.webContents.focus();
+  return true;
+});
+ipcMain.handle('media:action', (_event, action) => {
+  const keys = {
+    'play-pause': 'MediaPlayPause',
+    next: 'MediaNextTrack',
+    previous: 'MediaPreviousTrack',
+    stop: 'MediaStop'
+  };
+  const keyCode = keys[action];
+  if (!keyCode || !browserView || browserView.webContents.isDestroyed()) return false;
+  browserView.webContents.sendInputEvent({ type: 'keyDown', keyCode });
+  browserView.webContents.sendInputEvent({ type: 'keyUp', keyCode });
+  return true;
+});
 ipcMain.handle('window:toggle-fullscreen', () => {
   if (!mainWindow) return false;
   mainWindow.setKiosk(false);
@@ -569,6 +623,10 @@ ipcMain.handle('window:toggle-fullscreen', () => {
   return mainWindow.isFullScreen();
 });
 ipcMain.handle('system:action', async (_event, action) => {
+  if (action === 'logout') {
+    if (!isTvSession) return { ok: false, message: 'Выход из TV-сессии доступен после её установки.' };
+    return runSystemCommand('/usr/libexec/fedora-tv-os-logout');
+  }
   if (action === 'poweroff') return runSystemCommand('systemctl', ['poweroff']);
   if (action === 'reboot') return runSystemCommand('systemctl', ['reboot']);
   if (action === 'volume-up') return runSystemCommand('wpctl', ['set-volume', '@DEFAULT_AUDIO_SINK@', '5%+']);

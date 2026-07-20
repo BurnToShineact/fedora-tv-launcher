@@ -1,0 +1,4 @@
+#!/usr/bin/bash
+set -eu
+
+exec /usr/bin/fedora-tv-os --home "$@"

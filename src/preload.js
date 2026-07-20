@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('tv', {
   browserBack: () => ipcRenderer.invoke('browser:back'),
   goHome: () => ipcRenderer.invoke('browser:home'),
   refresh: () => ipcRenderer.invoke('browser:refresh'),
+  focusBrowser: () => ipcRenderer.invoke('browser:focus'),
+  mediaAction: (action) => ipcRenderer.invoke('media:action', action),
   systemAction: (action) => ipcRenderer.invoke('system:action', action),
   toggleFullscreen: () => ipcRenderer.invoke('window:toggle-fullscreen'),
   getAppInfo: () => ipcRenderer.invoke('app:get-info'),
@@ -21,6 +23,8 @@ contextBridge.exposeInMainWorld('tv', {
   downloadUpdate: () => ipcRenderer.invoke('update:download'),
   installUpdate: () => ipcRenderer.invoke('update:install'),
   onBrowserState: (callback) => ipcRenderer.on('browser:state', (_, state) => callback(state)),
+  onBrowserToolbarRequested: (callback) => ipcRenderer.on('browser:toolbar', callback),
   onHomeRequested: (callback) => ipcRenderer.on('launcher:home', callback),
+  onSystemActionRequested: (callback) => ipcRenderer.on('launcher:system-action', (_, action) => callback(action)),
   onUpdateState: (callback) => ipcRenderer.on('update:state', (_, state) => callback(state))
 });

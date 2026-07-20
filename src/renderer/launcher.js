@@ -43,16 +43,19 @@ const backgroundChooseButton = document.getElementById('background-choose');
 const backgroundClearButton = document.getElementById('background-clear');
 let focusables = [];
 let focusIndex = 0;
-let previousFocusIndex = 0;
 let toastTimer;
 let selectedColor = '#2563eb';
 let appsCache = [];
 let confirmHandler = null;
 let latestUpdateState = {};
 let dismissedUpdateKey = '';
+let browserOpen = false;
+const rememberedFocus = new WeakMap();
+const overlayReturnFocus = new WeakMap();
 
 function renderBrowserState(state = {}) {
   const visible = Boolean(state.visible);
+  browserOpen = visible;
   browserToolbar.hidden = !visible;
   launcher.hidden = visible;
   document.body.classList.toggle('browser-open', visible);
@@ -154,59 +157,100 @@ function activeOverlay() {
   return null;
 }
 
+function navigationScope() {
+  return activeOverlay() || (browserOpen ? browserToolbar : document);
+}
+
+function availableFocusables(scope = navigationScope()) {
+  return [...scope.querySelectorAll('.focusable')].filter((el) => !el.disabled && !el.closest('[hidden]'));
+}
+
 function refreshFocusableCache() {
-  const current = focusables[focusIndex] || document.activeElement;
-  const scope = activeOverlay() || document;
-  focusables = [...scope.querySelectorAll('.focusable')].filter((el) => !el.disabled && !el.closest('[hidden]'));
+  const current = document.activeElement;
+  const scope = navigationScope();
+  focusables = availableFocusables(scope);
   const currentIndex = focusables.indexOf(current);
   focusIndex = currentIndex >= 0 ? currentIndex : Math.min(focusIndex, Math.max(0, focusables.length - 1));
 }
 
-function refreshFocusables(preferred = 0) {
-  const scope = activeOverlay() || document;
-  focusables = [...scope.querySelectorAll('.focusable')].filter((el) => !el.disabled && !el.closest('[hidden]'));
-  focusIndex = Math.max(0, Math.min(preferred, focusables.length - 1));
-  setFocus(focusIndex);
+function refreshFocusables(preferred = null) {
+  const scope = navigationScope();
+  focusables = availableFocusables(scope);
+  const remembered = rememberedFocus.get(scope);
+  const target = preferred instanceof Element && focusables.includes(preferred)
+    ? preferred
+    : typeof preferred === 'number'
+      ? focusables[Math.max(0, Math.min(preferred, focusables.length - 1))]
+      : remembered && focusables.includes(remembered)
+        ? remembered
+        : focusables[0];
+  setFocus(target);
 }
 
-function setFocus(index) {
+function setFocus(target) {
   document.querySelectorAll('.focused').forEach((el) => el.classList.remove('focused'));
   if (!focusables.length) return;
-  focusIndex = (index + focusables.length) % focusables.length;
-  const target = focusables[focusIndex];
+  focusIndex = typeof target === 'number' ? target : focusables.indexOf(target);
+  focusIndex = Math.max(0, Math.min(focusIndex, focusables.length - 1));
+  target = focusables[focusIndex];
   target.classList.add('focused');
   target.focus({ preventScroll:true });
   target.scrollIntoView({ block:'nearest', inline:'nearest' });
+  rememberedFocus.set(navigationScope(), target);
+}
+
+function elementCenter(element) {
+  const rect = element.getBoundingClientRect();
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, rect };
+}
+
+function closestInDirection(current, candidates, direction, strictRow = false) {
+  const origin = elementCenter(current);
+  let best = null;
+  let bestScore = Infinity;
+  for (const candidate of candidates) {
+    if (candidate === current) continue;
+    const point = elementCenter(candidate);
+    const dx = point.x - origin.x;
+    const dy = point.y - origin.y;
+    const horizontal = direction === 'left' || direction === 'right';
+    const valid = direction === 'left' ? dx < -5 : direction === 'right' ? dx > 5 : direction === 'up' ? dy < -5 : dy > 5;
+    if (!valid) continue;
+    if (strictRow && Math.abs(dy) > Math.max(origin.rect.height, point.rect.height) * .55) continue;
+    const primary = horizontal ? Math.abs(dx) : Math.abs(dy);
+    const secondary = horizontal ? Math.abs(dy) : Math.abs(dx);
+    const score = primary + secondary * 3.2;
+    if (score < bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+  return best;
 }
 
 function moveFocus(direction) {
   const current = focusables[focusIndex];
   if (!current) return;
-  const rect = current.getBoundingClientRect();
-  const cx = rect.left + rect.width / 2;
-  const cy = rect.top + rect.height / 2;
-  let best = null;
-  let bestScore = Infinity;
+  const zone = current.closest('[data-nav-zone]');
+  const sameZone = zone ? focusables.filter((candidate) => candidate.closest('[data-nav-zone]') === zone) : focusables;
+  const horizontal = direction === 'left' || direction === 'right';
+  let target = closestInDirection(current, sameZone, direction, horizontal && Boolean(zone));
 
-  focusables.forEach((candidate, index) => {
-    if (candidate === current) return;
-    const r = candidate.getBoundingClientRect();
-    const x = r.left + r.width / 2;
-    const y = r.top + r.height / 2;
-    const dx = x - cx;
-    const dy = y - cy;
-    const valid = direction === 'left' ? dx < -5 : direction === 'right' ? dx > 5 : direction === 'up' ? dy < -5 : dy > 5;
-    if (!valid) return;
-    const primary = direction === 'left' || direction === 'right' ? Math.abs(dx) : Math.abs(dy);
-    const secondary = direction === 'left' || direction === 'right' ? Math.abs(dy) : Math.abs(dx);
-    const score = primary + secondary * 2.4;
-    if (score < bestScore) { bestScore = score; best = index; }
-  });
-  if (best !== null) setFocus(best);
+  if (!target && zone && !horizontal) {
+    const order = Number(zone.dataset.navOrder || 0);
+    const zones = [...navigationScope().querySelectorAll('[data-nav-zone]')].filter((candidateZone) => availableFocusables(candidateZone).length);
+    const ordered = zones
+      .filter((candidateZone) => direction === 'up' ? Number(candidateZone.dataset.navOrder) < order : Number(candidateZone.dataset.navOrder) > order)
+      .sort((a, b) => direction === 'up' ? Number(b.dataset.navOrder) - Number(a.dataset.navOrder) : Number(a.dataset.navOrder) - Number(b.dataset.navOrder));
+    if (ordered[0]) target = closestInDirection(current, availableFocusables(ordered[0]), direction);
+  }
+
+  if (!target && !zone) target = closestInDirection(current, focusables, direction);
+  if (target) setFocus(target);
 }
 
 function openConfirm(title, text, confirmText, handler) {
-  previousFocusIndex = focusIndex;
+  overlayReturnFocus.set(backdrop, document.activeElement);
   dialogTitle.textContent = title;
   dialogText.textContent = text;
   dialogConfirm.textContent = confirmText;
@@ -218,7 +262,7 @@ function openConfirm(title, text, confirmText, handler) {
 function closeConfirm() {
   backdrop.hidden = true;
   confirmHandler = null;
-  refreshFocusables(previousFocusIndex);
+  refreshFocusables(overlayReturnFocus.get(backdrop) || 0);
 }
 
 function setAddMode(mode) {
@@ -235,18 +279,18 @@ function setAddMode(mode) {
 }
 
 function openAddPanel() {
-  previousFocusIndex = focusIndex;
+  overlayReturnFocus.set(addBackdrop, document.activeElement);
   addForm.reset();
   selectedColor = '#2563eb';
   document.querySelectorAll('.color-choice').forEach((button, index) => button.classList.toggle('selected', index === 0));
   addBackdrop.hidden = false;
   setAddMode('web');
-  titleInput.focus();
+  refreshFocusables(titleInput);
 }
 
 function closeAddPanel() {
   addBackdrop.hidden = true;
-  refreshFocusables(previousFocusIndex);
+  refreshFocusables(overlayReturnFocus.get(addBackdrop) || 0);
 }
 
 async function addInstalledApp(installedApp) {
@@ -315,7 +359,7 @@ function renderManageList() {
 }
 
 function openManagePanel() {
-  previousFocusIndex = focusIndex;
+  overlayReturnFocus.set(manageBackdrop, document.activeElement);
   renderManageList();
   manageBackdrop.hidden = false;
   refreshFocusables(0);
@@ -323,7 +367,7 @@ function openManagePanel() {
 
 function closeManagePanel() {
   manageBackdrop.hidden = true;
-  refreshFocusables(previousFocusIndex);
+  refreshFocusables(overlayReturnFocus.get(manageBackdrop) || 0);
 }
 
 function requestDelete(app) {
@@ -347,18 +391,28 @@ async function activate(element) {
   if (element.dataset.app) {
     const selectedApp = JSON.parse(element.dataset.app);
     if (selectedApp.action === 'settings') return openManagePanel();
-    if (selectedApp.type === 'system') showToast('Открываем системное приложение · Home — вернуться в Fedora TV');
+    if (selectedApp.type === 'system') showToast('Открываем приложение · Home — вернуться в Fedora TV OS');
     const result = await window.tv.openApp(selectedApp);
     if (!result?.ok) showToast(result?.message || 'Не удалось открыть приложение');
     return;
   }
   if (element.dataset.action) {
-    const action = element.dataset.action;
-    openConfirm(action === 'poweroff' ? 'Выключить мини‑ПК?' : 'Перезагрузить мини‑ПК?', 'Все открытые приложения будут закрыты.', action === 'poweroff' ? 'Выключить' : 'Перезагрузить', async () => {
-      const result = await window.tv.systemAction(action);
-      if (!result?.ok) { closeConfirm(); showToast(result?.message || 'Команда не выполнена'); }
-    });
+    requestSystemAction(element.dataset.action);
   }
+}
+
+function requestSystemAction(action) {
+  const prompts = {
+    logout: ['Сменить пользователя?', 'TV-сессия завершится, и откроется экран входа Fedora.', 'Выйти'],
+    reboot: ['Перезагрузить мини‑ПК?', 'Все открытые приложения будут закрыты.', 'Перезагрузить'],
+    poweroff: ['Выключить мини‑ПК?', 'Все открытые приложения будут закрыты.', 'Выключить']
+  };
+  if (!prompts[action]) return;
+  const [title, message, confirmLabel] = prompts[action];
+  openConfirm(title, message, confirmLabel, async () => {
+    const result = await window.tv.systemAction(action);
+    if (!result?.ok) { closeConfirm(); showToast(result?.message || 'Команда не выполнена'); }
+  });
 }
 
 async function renderApps() {
@@ -458,38 +512,103 @@ addForm.addEventListener('submit', async (event) => {
   showToast(`«${title}» добавлено`);
 });
 
-document.addEventListener('keydown', async (event) => {
-  const key = event.key;
-  const typing = ['INPUT','TEXTAREA'].includes(document.activeElement?.tagName);
-  if (!typing && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Enter',' ','Escape','Backspace','BrowserBack','Home'].includes(key)) event.preventDefault();
-  if (typing) {
-    if (key === 'Escape' || key === 'BrowserBack') { event.preventDefault(); closeAddPanel(); }
+const keyActions = new Map([
+  ['ArrowLeft', 'left'], ['Left', 'left'],
+  ['ArrowRight', 'right'], ['Right', 'right'],
+  ['ArrowUp', 'up'], ['Up', 'up'],
+  ['ArrowDown', 'down'], ['Down', 'down'],
+  ['Enter', 'select'], ['NumpadEnter', 'select'], ['Select', 'select'], ['Accept', 'select'], [' ', 'select'],
+  ['Escape', 'back'], ['Backspace', 'back'], ['BrowserBack', 'back'], ['GoBack', 'back'],
+  ['Home', 'home'], ['BrowserHome', 'home'],
+  ['ContextMenu', 'menu'], ['Menu', 'menu'], ['Apps', 'menu'], ['F10', 'menu'],
+  ['AudioVolumeUp', 'volume-up'], ['AudioVolumeDown', 'volume-down'], ['AudioVolumeMute', 'mute'],
+  ['MediaPlayPause', 'play-pause'], ['MediaNextTrack', 'next'], ['MediaPreviousTrack', 'previous'], ['MediaStop', 'stop'],
+  ['Power', 'power'], ['PowerOff', 'power'], ['XF86PowerOff', 'power']
+]);
+
+function closeAllOverlays() {
+  backdrop.hidden = true;
+  addBackdrop.hidden = true;
+  manageBackdrop.hidden = true;
+  confirmHandler = null;
+}
+
+async function handleInputAction(action) {
+  if (action === 'left' || action === 'right' || action === 'up' || action === 'down') return moveFocus(action);
+  if (action === 'select') return document.activeElement?.classList.contains('focusable') && document.activeElement.click();
+  if (action === 'back') {
+    if (!backdrop.hidden) return closeConfirm();
+    if (!addBackdrop.hidden) return closeAddPanel();
+    if (!manageBackdrop.hidden) return closeManagePanel();
+    if (browserOpen) return window.tv.focusBrowser();
     return;
   }
-  if (key === 'ArrowLeft') moveFocus('left');
-  else if (key === 'ArrowRight') moveFocus('right');
-  else if (key === 'ArrowUp') moveFocus('up');
-  else if (key === 'ArrowDown') moveFocus('down');
-  else if (key === 'Enter' || key === ' ') await activate(focusables[focusIndex]);
-  else if (key === 'Escape' || key === 'Backspace' || key === 'BrowserBack') {
-    if (!backdrop.hidden) closeConfirm();
-    else if (!addBackdrop.hidden) closeAddPanel();
-    else if (!manageBackdrop.hidden) closeManagePanel();
-    else window.tv.browserBack();
-  } else if (key === 'Home') {
-    backdrop.hidden = addBackdrop.hidden = manageBackdrop.hidden = true;
-    window.tv.goHome();
-  } else if (key === 'F11') window.tv.toggleFullscreen();
-  else if (key === 'AudioVolumeUp') window.tv.systemAction('volume-up');
-  else if (key === 'AudioVolumeDown') window.tv.systemAction('volume-down');
-  else if (key === 'AudioVolumeMute') window.tv.systemAction('mute');
+  if (action === 'home') {
+    closeAllOverlays();
+    return window.tv.goHome();
+  }
+  if (action === 'menu') {
+    if (browserOpen) return window.tv.focusBrowser();
+    if (!activeOverlay()) return openManagePanel();
+    return;
+  }
+  if (action === 'power') return requestSystemAction('poweroff');
+  if (['volume-up', 'volume-down', 'mute'].includes(action)) return window.tv.systemAction(action);
+  if (['play-pause', 'next', 'previous', 'stop'].includes(action)) return window.tv.mediaAction(action);
+}
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'F11') {
+    event.preventDefault();
+    window.tv.toggleFullscreen();
+    return;
+  }
+  const action = keyActions.get(event.key) || keyActions.get(event.code);
+  if (!action) return;
+  const typing = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
+  if (typing && action !== 'back' && action !== 'home' && action !== 'power') return;
+  if (event.repeat && ['select', 'back', 'home', 'menu', 'power'].includes(action)) return;
+  event.preventDefault();
+  handleInputAction(action);
 });
 
+const gamepadState = new Map();
+function pollGamepads(timestamp) {
+  const pads = navigator.getGamepads?.() || [];
+  for (const pad of pads) {
+    if (!pad) continue;
+    const previous = gamepadState.get(pad.index) || { pressed: new Set(), repeats: new Map() };
+    const actions = new Set();
+    if (pad.buttons[14]?.pressed || pad.axes[0] < -.6) actions.add('left');
+    if (pad.buttons[15]?.pressed || pad.axes[0] > .6) actions.add('right');
+    if (pad.buttons[12]?.pressed || pad.axes[1] < -.6) actions.add('up');
+    if (pad.buttons[13]?.pressed || pad.axes[1] > .6) actions.add('down');
+    if (pad.buttons[0]?.pressed) actions.add('select');
+    if (pad.buttons[1]?.pressed) actions.add('back');
+    if (pad.buttons[9]?.pressed) actions.add('menu');
+    if (pad.buttons[16]?.pressed) actions.add('home');
+    for (const action of actions) {
+      const repeatable = ['left', 'right', 'up', 'down'].includes(action);
+      const deadline = previous.repeats.get(action) || 0;
+      if (!previous.pressed.has(action) || (repeatable && timestamp >= deadline)) {
+        handleInputAction(action);
+        previous.repeats.set(action, previous.pressed.has(action) ? timestamp + 120 : timestamp + 450);
+      }
+    }
+    previous.pressed = actions;
+    gamepadState.set(pad.index, previous);
+  }
+  requestAnimationFrame(pollGamepads);
+}
+
 document.addEventListener('mousemove', () => document.querySelectorAll('.focused').forEach((el) => el.classList.remove('focused')));
-window.tv.onHomeRequested(() => { backdrop.hidden = addBackdrop.hidden = manageBackdrop.hidden = true; refreshFocusables(0); });
+window.tv.onHomeRequested(() => { closeAllOverlays(); refreshFocusables(); });
+window.tv.onBrowserToolbarRequested(() => refreshFocusables(0));
+window.tv.onSystemActionRequested((action) => requestSystemAction(action));
 window.tv.onBrowserState(renderBrowserState);
 window.tv.onUpdateState(renderUpdateState);
 window.addEventListener('online', () => window.tv.checkForUpdates());
 updateClock();
 setInterval(updateClock, 1000);
 loadApps().catch((error) => showToast(error.message));
+requestAnimationFrame(pollGamepads);

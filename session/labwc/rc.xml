@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<labwc_config>
+  <core>
+    <gap>0</gap>
+  </core>
+
+  <focus>
+    <followMouse>no</followMouse>
+    <raiseOnFocus>yes</raiseOnFocus>
+  </focus>
+
+  <keyboard>
+    <repeatRate>25</repeatRate>
+    <repeatDelay>500</repeatDelay>
+
+    <keybind key="Home">
+      <action name="Execute" command="/usr/libexec/fedora-tv-os-home" />
+    </keybind>
+    <keybind key="XF86HomePage">
+      <action name="Execute" command="/usr/libexec/fedora-tv-os-home" />
+    </keybind>
+    <keybind key="W-Home">
+      <action name="Execute" command="/usr/libexec/fedora-tv-os-home" />
+    </keybind>
+    <keybind key="A-F4">
+      <action name="Close" />
+    </keybind>
+    <keybind key="XF86AudioRaiseVolume">
+      <action name="Execute" command="wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+" />
+    </keybind>
+    <keybind key="XF86AudioLowerVolume">
+      <action name="Execute" command="wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-" />
+    </keybind>
+    <keybind key="XF86AudioMute">
+      <action name="Execute" command="wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle" />
+    </keybind>
+    <keybind key="XF86PowerOff">
+      <action name="Execute" command="/usr/libexec/fedora-tv-os-home --poweroff" />
+    </keybind>
+  </keyboard>
+
+  <mouse>
+    <default />
+  </mouse>
+
+  <windowRules>
+    <windowRule identifier="*" serverDecoration="no">
+      <action name="Maximize" />
+    </windowRule>
+  </windowRules>
+</labwc_config>

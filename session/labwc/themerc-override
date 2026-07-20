@@ -1,0 +1,10 @@
+window.active.border.color: #000000
+window.inactive.border.color: #000000
+window.active.title.bg.color: #090d14
+window.inactive.title.bg.color: #090d14
+window.active.label.text.color: #ffffff
+window.inactive.label.text.color: #94a3b8
+window.border.width: 0
+padding.height: 0
+padding.width: 0
+

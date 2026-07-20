@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Fedora TV OS
+Name[ru]=Fedora TV OS
+Comment=Television interface for Fedora
+Comment[ru]=Телевизионная оболочка для Fedora
+Exec=/usr/libexec/fedora-tv-os-session
+TryExec=/usr/bin/labwc
+Type=Application
+DesktopNames=FedoraTV
+
