@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, globalShortcut, session, dialog, nativeImage } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, globalShortcut, session, dialog, nativeImage, components } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { execFile, spawn } = require('child_process');
@@ -8,19 +8,77 @@ let mainWindow;
 let browserView;
 let browserVisible = false;
 let keyboardVisible = false;
+let browserFullscreen = false;
 let updateState = { status: 'idle', version: app.getVersion(), progress: 0, message: '' };
 let updateCheckInProgress = false;
 let downloadedUpdatePath = null;
 let updateInstallInProgress = false;
+let mediaComponentsReady = Promise.resolve(false);
+let protectedMediaVersion = null;
 let systemAppMode = false;
 let confirmationVisible = false;
 let pendingLauncherAction = process.argv.includes('--poweroff') ? 'poweroff' : null;
 const isDev = process.argv.includes('--dev');
 const isTvSession = process.argv.includes('--tv-session') || process.env.FEDORA_TV_SESSION === '1';
 const updatesEnabled = app.isPackaged;
-const BROWSER_TOOLBAR_HEIGHT = 82;
+const BROWSER_TOOLBAR_HEIGHT = 70;
 const KEYBOARD_HEIGHT = 292;
 const KEYBOARD_VIEWPORT_RATIO = 0.48;
+const WEB_PARTITION = 'persist:fedora-tv';
+
+function configureWidevine() {
+  if (process.platform !== 'linux') return null;
+  const platformDirectory = process.arch === 'arm64' ? 'linux_arm64' : 'linux_x64';
+  const roots = [
+    '/opt/google/chrome/WidevineCdm',
+    '/opt/google/chrome-beta/WidevineCdm',
+    '/opt/google/chrome-unstable/WidevineCdm',
+    '/usr/lib64/chromium/WidevineCdm',
+    '/usr/lib/chromium/WidevineCdm'
+  ];
+
+  for (const root of roots) {
+    const libraryPath = path.join(root, '_platform_specific', platformDirectory, 'libwidevinecdm.so');
+    const manifestPath = path.join(root, 'manifest.json');
+    try {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      if (!fs.statSync(libraryPath).isFile() || !/^\d+(?:\.\d+)+$/.test(manifest.version || '')) continue;
+      app.commandLine.appendSwitch('widevine-cdm-path', libraryPath);
+      app.commandLine.appendSwitch('widevine-cdm-version', manifest.version);
+      return { libraryPath, version: manifest.version };
+    } catch {
+      // Widevine необязателен: обычные HLS/HTML5-потоки продолжат работать.
+    }
+  }
+  return null;
+}
+
+const widevineInfo = components?.whenReady ? null : configureWidevine();
+protectedMediaVersion = widevineInfo?.version || null;
+
+function initializeMediaComponents() {
+  if (!components?.whenReady) return mediaComponentsReady;
+  const componentId = components.WIDEVINE_CDM_ID;
+  mediaComponentsReady = components.whenReady([componentId]).then(() => {
+    const installedVersion = components.status()?.[componentId]?.version || null;
+    protectedMediaVersion = installedVersion;
+    writeUpdateLog('info', `Widevine component ready: ${installedVersion || 'unknown'}`);
+    const activatedVersion = readSettings().widevineActivatedVersion || null;
+    if (process.platform === 'linux' && installedVersion && activatedVersion !== installedVersion) {
+      writeSettings({ widevineActivatedVersion: installedVersion });
+      writeUpdateLog('info', 'Restarting once to activate the newly installed Widevine component');
+      setTimeout(() => {
+        app.relaunch();
+        app.quit();
+      }, 500);
+    }
+    return Boolean(installedVersion);
+  }).catch((error) => {
+    writeUpdateLog('warn', `Widevine component unavailable: ${error?.message || error}`);
+    return false;
+  });
+  return mediaComponentsReady;
+}
 
 
 function sendUpdateState(patch = {}) {
@@ -437,11 +495,52 @@ function accentForDesktopId(desktopId) {
   return colors[hash % colors.length];
 }
 
+function cleanBrowserUserAgent(userAgent) {
+  return String(userAgent || '')
+    .replace(/\s+(?:Electron|fedora-tv-os)\/[^\s]+/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function isSecureWebUrl(value) {
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function configureWebSession(webSession) {
+  const userAgent = cleanBrowserUserAgent(webSession.getUserAgent());
+  webSession.setUserAgent(userAgent, 'ru-RU,ru,en-US,en');
+
+  const safePermissions = new Set([
+    'fullscreen',
+    'mediaKeySystem',
+    'pointerLock',
+    'storage-access',
+    'top-level-storage-access',
+    'clipboard-sanitized-write'
+  ]);
+  const canGrant = (permission, requestingUrl, fallbackUrl = '') => (
+    safePermissions.has(permission) && isSecureWebUrl(requestingUrl || fallbackUrl)
+  );
+
+  webSession.setPermissionCheckHandler((webContents, permission, requestingOrigin, details = {}) => (
+    canGrant(permission, details.requestingUrl || requestingOrigin, webContents?.getURL())
+  ));
+  webSession.setPermissionRequestHandler((webContents, permission, callback, details = {}) => {
+    callback(canGrant(permission, details.requestingUrl, webContents.getURL()));
+  });
+  return userAgent;
+}
+
 function sendBrowserState(extra = {}) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.webContents.send('browser:state', {
     visible: browserVisible,
-    canGoBack: Boolean(browserView?.webContents.canGoBack()),
+    fullscreen: browserFullscreen,
+    canGoBack: Boolean(browserView?.webContents.navigationHistory.canGoBack()),
     loading: Boolean(browserView?.webContents.isLoading()),
     title: browserView?.webContents.getTitle() || '',
     url: browserView?.webContents.getURL() || '',
@@ -453,51 +552,80 @@ function resizeBrowserView() {
   if (!mainWindow || !browserView || !browserVisible || confirmationVisible) return;
   const [width, height] = mainWindow.getContentSize();
   const keyboardHeight = keyboardVisible ? Math.min(KEYBOARD_HEIGHT, Math.floor(height * KEYBOARD_VIEWPORT_RATIO)) : 0;
-  browserView.setBounds({ x: 0, y: BROWSER_TOOLBAR_HEIGHT, width, height: Math.max(1, height - BROWSER_TOOLBAR_HEIGHT - keyboardHeight) });
+  const toolbarHeight = browserFullscreen ? 0 : BROWSER_TOOLBAR_HEIGHT;
+  browserView.setBounds({ x: 0, y: toolbarHeight, width, height: Math.max(1, height - toolbarHeight - keyboardHeight) });
 }
 
 function ensureBrowserView() {
   if (browserView) return browserView;
+
+  const webSession = session.fromPartition(WEB_PARTITION);
+  const userAgent = configureWebSession(webSession);
 
   browserView = new WebContentsView({
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      partition: 'persist:fedora-tv'
+      plugins: true,
+      autoplayPolicy: 'no-user-gesture-required',
+      backgroundThrottling: false,
+      disableHtmlFullscreenWindowResize: true,
+      partition: WEB_PARTITION
     }
   });
 
   browserView.setBackgroundColor('#090d14');
+  browserView.webContents.setUserAgent(userAgent);
   browserView.webContents.setWindowOpenHandler(({ url }) => {
-    browserView.webContents.loadURL(url);
+    if (isSecureWebUrl(url)) browserView.webContents.loadURL(url);
     return { action: 'deny' };
   });
 
-  for (const eventName of ['did-start-loading', 'did-stop-loading', 'did-navigate', 'did-navigate-in-page', 'page-title-updated']) {
+  for (const eventName of ['did-stop-loading', 'did-navigate', 'did-navigate-in-page', 'page-title-updated']) {
     browserView.webContents.on(eventName, () => sendBrowserState());
   }
+  browserView.webContents.on('did-start-loading', () => sendBrowserState({ error: '' }));
+  browserView.webContents.on('did-fail-load', (_event, errorCode, errorDescription, _url, isMainFrame) => {
+    if (isMainFrame && errorCode !== -3) sendBrowserState({ error: errorDescription || `Ошибка ${errorCode}` });
+  });
+  browserView.webContents.on('enter-html-full-screen', () => {
+    browserFullscreen = true;
+    resizeBrowserView();
+    sendBrowserState();
+  });
+  browserView.webContents.on('leave-html-full-screen', () => {
+    browserFullscreen = false;
+    resizeBrowserView();
+    sendBrowserState();
+  });
 
   browserView.webContents.on('before-input-event', (event, input) => {
     const key = input.key;
+    if (input.type !== 'keyDown' || input.isAutoRepeat) return;
     if (key === 'Home' || key === 'BrowserHome' || (key === 'Escape' && input.alt)) {
       event.preventDefault();
       showLauncher();
       return;
     }
-    if ((key === 'BrowserBack' || key === 'Escape' || key === 'Backspace') && input.type === 'keyDown') {
+    if (key === 'Escape' && browserFullscreen) {
       event.preventDefault();
-      if (browserView.webContents.canGoBack()) browserView.webContents.goBack();
+      browserView.webContents.executeJavaScript('document.fullscreenElement ? document.exitFullscreen() : false', true).catch(() => {});
+      return;
+    }
+    if (key === 'BrowserBack' || key === 'Escape') {
+      event.preventDefault();
+      if (browserView.webContents.navigationHistory.canGoBack()) browserView.webContents.navigationHistory.goBack();
       else showLauncher();
       return;
     }
-    if (['ContextMenu', 'Menu', 'Apps', 'F10'].includes(key) && input.type === 'keyDown') {
+    if (['ContextMenu', 'Menu', 'Apps', 'F10'].includes(key)) {
       event.preventDefault();
       mainWindow?.webContents.focus();
       mainWindow?.webContents.send('browser:toolbar');
       return;
     }
-    if (['Power', 'PowerOff', 'XF86PowerOff'].includes(key) && input.type === 'keyDown') {
+    if (['Power', 'PowerOff', 'XF86PowerOff'].includes(key)) {
       event.preventDefault();
       requestLauncherAction('poweroff');
     }
@@ -507,8 +635,15 @@ function ensureBrowserView() {
 }
 
 function showLauncher() {
+  if (browserView && !browserView.webContents.isDestroyed()) {
+    browserView.webContents.executeJavaScript(`(() => {
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      for (const media of document.querySelectorAll('video, audio')) media.pause();
+    })()`).catch(() => {});
+  }
   browserVisible = false;
   keyboardVisible = false;
+  browserFullscreen = false;
   if (systemAppMode) {
     systemAppMode = false;
   }
@@ -553,6 +688,7 @@ function requestLauncherAction(action) {
 }
 
 async function openWebsite(url) {
+  await mediaComponentsReady;
   const view = ensureBrowserView();
   if (!mainWindow.contentView.children.includes(view)) mainWindow.contentView.addChildView(view);
   browserVisible = true;
@@ -560,6 +696,48 @@ async function openWebsite(url) {
   view.webContents.focus();
   await view.webContents.loadURL(url);
   sendBrowserState({ visible: true });
+}
+
+async function controlWebMedia(action) {
+  if (!browserView || !browserVisible || browserView.webContents.isDestroyed()) return false;
+  const safeAction = ['play-pause', 'pause', 'stop'].includes(action) ? action : null;
+  if (!safeAction) return false;
+  try {
+    return await browserView.webContents.executeJavaScript(`(() => {
+      const media = [...document.querySelectorAll('video, audio')]
+        .filter((item) => item.readyState > 0)
+        .sort((a, b) => (b.clientWidth * b.clientHeight) - (a.clientWidth * a.clientHeight))[0];
+      if (!media) return false;
+      if (${JSON.stringify(safeAction)} === 'play-pause') {
+        if (media.paused) media.play().catch(() => {});
+        else media.pause();
+      } else {
+        media.pause();
+        if (${JSON.stringify(safeAction)} === 'stop' && Number.isFinite(media.duration)) media.currentTime = 0;
+      }
+      return true;
+    })()`, true);
+  } catch {
+    return false;
+  }
+}
+
+async function toggleWebFullscreen() {
+  if (!browserView || !browserVisible || browserView.webContents.isDestroyed()) return false;
+  try {
+    return await browserView.webContents.executeJavaScript(`(async () => {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        return false;
+      }
+      const video = [...document.querySelectorAll('video')]
+        .sort((a, b) => (b.clientWidth * b.clientHeight) - (a.clientWidth * a.clientHeight))[0];
+      await (video || document.documentElement).requestFullscreen();
+      return true;
+    })()`, true);
+  } catch {
+    return false;
+  }
 }
 
 function createWindow() {
@@ -612,9 +790,11 @@ if (!hasSingleInstanceLock) {
   });
 
 app.whenReady().then(() => {
+  session.defaultSession.setPermissionCheckHandler(() => false);
   session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
   if (updatesEnabled) configureUpdater();
   createWindow();
+  initializeMediaComponents();
   mainWindow.webContents.once('did-finish-load', () => {
     sendUpdateState();
     if (pendingLauncherAction) {
@@ -736,8 +916,8 @@ ipcMain.handle('app:open', async (_event, selectedApp) => {
 
 ipcMain.handle('browser:back', () => {
   if (!browserView || !browserVisible) return { atHome: true };
-  if (browserView.webContents.canGoBack()) {
-    browserView.webContents.goBack();
+  if (browserView.webContents.navigationHistory.canGoBack()) {
+    browserView.webContents.navigationHistory.goBack();
     return { atHome: false };
   }
   showLauncher();
@@ -750,6 +930,7 @@ ipcMain.handle('browser:focus', () => {
   browserView.webContents.focus();
   return true;
 });
+ipcMain.handle('browser:fullscreen', () => toggleWebFullscreen());
 ipcMain.handle('browser:keyboard', (_event, visible) => {
   keyboardVisible = Boolean(visible);
   resizeBrowserView();
@@ -769,7 +950,7 @@ ipcMain.handle('keyboard:input', (_event, input) => {
   }
   return true;
 });
-ipcMain.handle('media:action', (_event, action) => {
+ipcMain.handle('media:action', async (_event, action) => {
   const keys = {
     'play-pause': 'MediaPlayPause',
     next: 'MediaNextTrack',
@@ -778,6 +959,7 @@ ipcMain.handle('media:action', (_event, action) => {
   };
   const keyCode = keys[action];
   if (!keyCode || !browserView || browserView.webContents.isDestroyed()) return false;
+  if (['play-pause', 'stop'].includes(action) && await controlWebMedia(action)) return true;
   browserView.webContents.sendInputEvent({ type: 'keyDown', keyCode });
   browserView.webContents.sendInputEvent({ type: 'keyUp', keyCode });
   return true;
@@ -879,7 +1061,8 @@ ipcMain.on('external:home', showLauncher);
 ipcMain.handle('app:get-info', () => ({
   version: app.getVersion(),
   packaged: app.isPackaged,
-  appImage: Boolean(process.env.APPIMAGE)
+  appImage: Boolean(process.env.APPIMAGE),
+  widevine: protectedMediaVersion
 }));
 ipcMain.handle('update:get-state', () => updateState);
 ipcMain.handle('update:check', () => checkForUpdates());

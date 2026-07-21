@@ -4,9 +4,13 @@ const browserToolbar = document.getElementById('browser-toolbar');
 const browserBackButton = document.getElementById('browser-back');
 const browserHomeButton = document.getElementById('browser-home');
 const browserRefreshButton = document.getElementById('browser-refresh');
+const browserPlayButton = document.getElementById('browser-play');
+const browserFullscreenButton = document.getElementById('browser-fullscreen');
 const browserKeyboardButton = document.getElementById('browser-keyboard');
+const browserFocusButton = document.getElementById('browser-focus');
 const browserTitle = document.getElementById('browser-title');
 const browserUrl = document.getElementById('browser-url');
+const browserError = document.getElementById('browser-error');
 const browserLoading = document.getElementById('browser-loading');
 const updateNotice = document.getElementById('update-notice');
 const updateNoticeTitle = document.getElementById('update-notice-title');
@@ -142,7 +146,10 @@ function renderBrowserState(state = {}) {
   document.body.classList.toggle('browser-open', visible);
   browserTitle.textContent = state.title || 'Веб-приложение';
   browserUrl.textContent = state.url || '';
+  browserError.textContent = state.error || '';
+  browserError.hidden = !state.error;
   browserBackButton.disabled = !state.canGoBack;
+  browserFullscreenButton.setAttribute('aria-pressed', String(Boolean(state.fullscreen)));
   browserLoading.hidden = !state.loading;
   if (!visible && keyboardOpen) setKeyboardVisible(false);
 }
@@ -828,7 +835,10 @@ async function loadApps() {
   browserBackButton.addEventListener('click', () => window.tv.browserBack());
   browserHomeButton.addEventListener('click', () => window.tv.goHome());
   browserRefreshButton.addEventListener('click', () => window.tv.refresh());
+  browserPlayButton.addEventListener('click', () => window.tv.mediaAction('play-pause'));
+  browserFullscreenButton.addEventListener('click', () => window.tv.toggleBrowserFullscreen());
   browserKeyboardButton.addEventListener('click', () => setKeyboardVisible(!keyboardOpen));
+  browserFocusButton.addEventListener('click', () => window.tv.focusBrowser());
   keyboardToggle.addEventListener('click', () => setKeyboardVisible(!keyboardOpen));
   topbarVolume.addEventListener('click', () => {
     if (!quickPanel.hidden && quickPanel.dataset.section === 'sound') return closeQuickPanel();

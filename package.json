@@ -1,6 +1,6 @@
 {
   "name": "fedora-tv-os",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Отдельная телевизионная Wayland-сессия для Fedora",
   "homepage": "https://github.com/BurnToShineact/fedora-tv-launcher",
   "repository": {
@@ -15,6 +15,7 @@
   "license": "MIT",
   "main": "src/main.js",
   "scripts": {
+    "postinstall": "node node_modules/electron/install.js",
     "start": "electron .",
     "dev": "electron . --dev",
     "pack:dir": "electron-builder --dir",
@@ -28,7 +29,7 @@
     "electron-updater": "^6.8.4"
   },
   "devDependencies": {
-    "electron": "^37.2.3",
+    "electron": "https://github.com/castlabs/electron-releases/archive/refs/tags/v43.0.0%2Bwvcus.tar.gz",
     "electron-builder": "^26.11.1"
   },
   "build": {
@@ -41,6 +42,9 @@
       "assets/**/*",
       "package.json"
     ],
+    "electronDownload": {
+      "mirror": "https://github.com/castlabs/electron-releases/releases/download/"
+    },
     "linux": {
       "target": [
         {

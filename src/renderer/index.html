@@ -13,16 +13,19 @@
       <button class="browser-button focusable" id="browser-back" aria-label="Назад">←</button>
       <button class="browser-button focusable" id="browser-home" aria-label="На главный экран">⌂</button>
       <button class="browser-button focusable" id="browser-refresh" aria-label="Обновить страницу">↻</button>
+      <button class="browser-button focusable" id="browser-play" aria-label="Воспроизведение или пауза">▶</button>
+      <button class="browser-button focusable" id="browser-fullscreen" aria-label="Полноэкранный режим">⛶</button>
       <button class="browser-button focusable" id="browser-keyboard" aria-label="Экранная клавиатура">⌨</button>
     </div>
     <div class="browser-page">
       <strong id="browser-title">Веб-приложение</strong>
       <span id="browser-url"></span>
+      <span class="browser-error" id="browser-error" role="status" hidden></span>
     </div>
     <div class="browser-loading" id="browser-loading" hidden><span></span></div>
-    <div class="browser-home-hint">Menu — панель · Назад — к сайту · Home — домой</div>
+    <button class="browser-resume focusable" id="browser-focus" type="button"><span>К сайту</span> ↘</button>
   </header>
-  <aside class="update-notice" id="update-notice" data-nav-zone="notice" data-nav-order="0" role="status" hidden>
+  <aside class="update-notice" id="update-notice" data-nav-zone="notice" data-nav-order="3" role="status" hidden>
     <div class="update-notice-icon">↑</div>
     <div class="update-notice-copy">
       <strong id="update-notice-title">Обновление Fedora TV OS</strong>

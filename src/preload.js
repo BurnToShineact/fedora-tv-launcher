@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('tv', {
   goHome: () => ipcRenderer.invoke('browser:home'),
   refresh: () => ipcRenderer.invoke('browser:refresh'),
   focusBrowser: () => ipcRenderer.invoke('browser:focus'),
+  toggleBrowserFullscreen: () => ipcRenderer.invoke('browser:fullscreen'),
   mediaAction: (action) => ipcRenderer.invoke('media:action', action),
   setBrowserKeyboard: (visible) => ipcRenderer.invoke('browser:keyboard', visible),
   keyboardInput: (input) => ipcRenderer.invoke('keyboard:input', input),
