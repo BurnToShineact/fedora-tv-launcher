@@ -60,11 +60,15 @@
       <div class="status">
         <div class="system-pills" aria-label="Состояние системы">
           <button class="status-pill focusable" id="topbar-network" type="button" aria-label="Выбрать сеть Wi‑Fi" aria-expanded="false"><i class="wifi-signal level-0" aria-hidden="true">◌</i><b>Wi‑Fi</b></button>
-          <button class="status-pill focusable" id="topbar-volume" type="button" aria-label="Настроить громкость" aria-expanded="false"><i class="volume-symbol" aria-hidden="true">🔊</i><b>—</b></button>
+          <button class="status-pill focusable" id="topbar-volume" type="button" aria-label="Настроить громкость" aria-expanded="false"><i class="volume-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 10v4h4l5 4V6l-5 4H4Z"/><path d="M16 9.5a4 4 0 0 1 0 5"/><path d="M19 7a7 7 0 0 1 0 10"/></svg></i><b>—</b></button>
         </div>
-        <button class="topbar-button focusable" id="keyboard-toggle" aria-label="Экранная клавиатура" title="Экранная клавиатура">⌨</button>
-        <button class="topbar-button focusable" id="settings-shortcut" aria-label="Настройки" title="Настройки">⚙</button>
-        <span class="date" id="date"></span><strong id="clock">00:00</strong>
+        <button class="topbar-button focusable" id="keyboard-toggle" aria-label="Экранная клавиатура" title="Экранная клавиатура">
+          <svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 9h.01M11 9h.01M15 9h.01M18 9h.01M7 13h.01M11 13h.01M15 13h.01M18 13h.01M8 16h8"/></svg>
+        </button>
+        <button class="topbar-button focusable" id="settings-shortcut" aria-label="Настройки" title="Настройки">
+          <svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.86 2.86-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.55v-.1A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.86-2.86.06-.06A1.7 1.7 0 0 0 4.1 15a1.7 1.7 0 0 0-1.5-1H2.5V10h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.34-1.88L3.7 7.06 6.56 4.2l.06.06A1.7 1.7 0 0 0 8.5 4.6a1.7 1.7 0 0 0 1-1.5V3h4.05v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.86 2.86-.06.06A1.7 1.7 0 0 0 18.95 9a1.7 1.7 0 0 0 1.5 1h.1v4h-.1a1.7 1.7 0 0 0-1.05 1Z"/></svg>
+        </button>
+        <div class="time-block"><span class="date" id="date"></span><strong id="clock">00:00</strong></div>
       </div>
     </header>
 

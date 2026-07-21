@@ -1216,3 +1216,150 @@ body::before { opacity: .16; animation: none; }
   .app-card .icon { width: 62px; height: 62px; }
   .keyboard-controls .keyboard-key.language { flex-grow: 1.2; }
 }
+
+/* v2.5.1 — cohesive floating top bar */
+.topbar {
+  position: relative;
+  min-height: 74px;
+  padding: 10px 12px;
+  overflow: hidden;
+  border: 1px solid rgba(231, 240, 255, .2);
+  border-radius: 22px;
+  background:
+    linear-gradient(105deg, rgba(99, 151, 222, .14), transparent 34%),
+    linear-gradient(145deg, rgba(35, 47, 63, .66), rgba(12, 20, 31, .46));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14), 0 18px 48px rgba(0, 0, 0, .2);
+  backdrop-filter: blur(30px) saturate(130%);
+  -webkit-backdrop-filter: blur(30px) saturate(130%);
+}
+.topbar::before {
+  content: "";
+  position: absolute;
+  width: 240px;
+  height: 120px;
+  left: -70px;
+  top: -64px;
+  border-radius: 50%;
+  background: rgba(116, 174, 255, .16);
+  filter: blur(26px);
+  pointer-events: none;
+}
+.topbar > * { position: relative; z-index: 1; }
+.brand { min-width: 0; gap: 12px; }
+.brand-mark {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, .26);
+  border-radius: 15px;
+  background: linear-gradient(145deg, #bcd6ff, #84adeb);
+  color: #0b315e;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55), 0 10px 24px rgba(32, 92, 171, .3);
+}
+.brand strong { font-size: 19px; letter-spacing: -.015em; }
+.brand span { margin-top: 3px; color: #aebfd3; font-size: 12px; }
+.status { align-items: center; gap: 8px; padding: 0; }
+.system-pills {
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid rgba(231, 240, 255, .1);
+  border-radius: 17px;
+  background: rgba(5, 12, 21, .16);
+}
+.status-pill,
+.topbar-button {
+  height: 42px;
+  border-color: transparent;
+  border-radius: 13px;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.status-pill { padding-inline: 12px; }
+.status-pill:hover,
+.status-pill:focus,
+.status-pill.focused,
+.status-pill[aria-expanded="true"],
+.topbar-button:hover,
+.topbar-button:focus,
+.topbar-button.focused {
+  border-color: rgba(221, 235, 255, .35);
+  background: rgba(123, 163, 216, .2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1);
+  transform: none;
+}
+.topbar-button {
+  width: 42px;
+  flex: 0 0 42px;
+  border: 1px solid rgba(231, 240, 255, .11);
+  background: rgba(255, 255, 255, .045);
+}
+.button-icon {
+  width: 21px;
+  height: 21px;
+  display: block;
+  margin: auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.volume-symbol svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.volume-symbol.muted { color: #ffabb5; }
+.time-block {
+  min-width: 126px;
+  margin-left: 4px;
+  padding: 1px 5px 1px 16px;
+  display: grid;
+  justify-items: end;
+  border-left: 1px solid rgba(231, 240, 255, .14);
+}
+.time-block .date {
+  color: #9fb1c6;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: .025em;
+  text-transform: capitalize;
+}
+.status .time-block #clock {
+  color: #f7fbff;
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.08;
+  letter-spacing: -.025em;
+}
+.quick-panel { top: clamp(108px, 11vh, 126px); }
+
+@media (max-width: 1100px) {
+  .status-pill { max-width: 132px; }
+  .time-block { min-width: 80px; padding-left: 13px; }
+  .time-block .date { display: none; }
+}
+@media (max-width: 760px) {
+  .topbar { min-height: 66px; padding: 8px; border-radius: 19px; }
+  .brand-mark { width: 44px; height: 44px; border-radius: 14px; }
+  .brand span { display: none; }
+  .status-pill { width: 40px; padding: 0; justify-content: center; }
+  .status-pill b { display: none; }
+  .topbar-button { width: 40px; height: 40px; flex-basis: 40px; }
+  .time-block { min-width: 69px; margin-left: 0; padding-left: 10px; }
+  .status .time-block #clock { font-size: 22px; }
+  .quick-panel { top: 98px; }
+}
+@media (max-width: 560px) {
+  .brand > div:last-child { display: none; }
+  .system-pills { padding: 3px; }
+  .status { gap: 5px; }
+}

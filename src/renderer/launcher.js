@@ -566,9 +566,20 @@ function renderAudio(state = {}) {
   muteToggle.classList.toggle('active', Boolean(state.muted));
   quickMuteToggle.textContent = state.muted ? t('unmute') : t('mute');
   quickMuteToggle.classList.toggle('active', Boolean(state.muted));
-  topbarVolume.querySelector('i').textContent = state.muted ? '🔇' : state.volume < 35 ? '🔈' : state.volume < 70 ? '🔉' : '🔊';
+  const topbarVolumeIcon = topbarVolume.querySelector('i');
+  topbarVolumeIcon.className = `volume-symbol${state.muted ? ' muted' : ''}`;
+  topbarVolumeIcon.innerHTML = volumeIconMarkup(state.volume, Boolean(state.muted));
   topbarVolume.querySelector('b').textContent = state.muted ? (currentLanguage === 'en' ? 'Muted' : 'Без звука') : `${state.volume}%`;
   topbarVolume.classList.toggle('inactive', Boolean(state.muted));
+}
+
+function volumeIconMarkup(volume = 0, muted = false) {
+  const waves = muted
+    ? '<path class="volume-off-line" d="m17 9 5 5m0-5-5 5"/>'
+    : Number(volume) < 35
+      ? '<path class="volume-wave wave-low" d="M16 9.5a4 4 0 0 1 0 5"/>'
+      : '<path class="volume-wave wave-low" d="M16 9.5a4 4 0 0 1 0 5"/><path class="volume-wave wave-high" d="M19 7a7 7 0 0 1 0 10"/>';
+  return `<svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M4 10v4h4l5 4V6l-5 4H4Z"/>${waves}</svg>`;
 }
 
 function wifiSignalLevel(signal) {
