@@ -171,7 +171,7 @@ function renderUpdateState(state = {}) {
   updateNoticeLater.hidden = status === 'installing';
   renderUpdateVisual(state);
   if (noticeWasHidden !== updateNotice.hidden && !activeOverlay() && !launcher.hidden) refreshFocusableCache();
-  if (!manageBackdrop.hidden) refreshFocusables(Math.min(focusIndex, Math.max(0, focusables.length - 1)));
+  if (!manageBackdrop.hidden) refreshFocusables(document.activeElement);
 }
 
 function renderUpdateVisual(state = {}) {
@@ -314,6 +314,7 @@ function closestInDirection(current, candidates, direction, strictRow = false) {
 }
 
 function moveFocus(direction) {
+  refreshFocusableCache();
   const current = focusables[focusIndex];
   if (!current) return;
   const zone = current.closest('[data-nav-zone]');
@@ -359,7 +360,7 @@ function setAddMode(mode) {
     button.classList.toggle('selected', selected);
     button.setAttribute('aria-selected', String(selected));
   });
-  refreshFocusables(0);
+  refreshFocusables(document.querySelector(`[data-add-mode="${mode}"]`));
   if (systemMode) loadSystemApps();
 }
 
@@ -389,6 +390,7 @@ async function addInstalledApp(installedApp) {
 }
 
 async function loadSystemApps() {
+  const previousFocus = document.activeElement;
   systemAppList.innerHTML = '<div class="empty-state">Ищем установленные приложения…</div>';
   try {
     const installedApps = await window.tv.getSystemApps();
@@ -414,7 +416,7 @@ async function loadSystemApps() {
       addButton.addEventListener('click', () => addInstalledApp(installedApp));
       systemAppList.appendChild(row);
     }
-    refreshFocusables(0);
+    refreshFocusables(previousFocus);
   } catch (error) {
     systemAppList.innerHTML = '<div class="empty-state">Не удалось прочитать список приложений.</div>';
     showToast(error.message);
@@ -449,7 +451,7 @@ function openManagePanel() {
   renderManageList();
   manageBackdrop.hidden = false;
   refreshFocusables(0);
-  loadSystemSettings().then(() => refreshFocusables(0));
+  loadSystemSettings().then(() => refreshFocusables(document.activeElement));
 }
 
 function closeManagePanel() {
@@ -519,22 +521,30 @@ function renderKeyboard() {
     ? [['1','2','3','4','5','6','7','8','9','0','-','='], ['q','w','e','r','t','y','u','i','o','p','[',']'], ['a','s','d','f','g','h','j','k','l',';','\'','Backspace'], ['z','x','c','v','b','n','m',',','.','/','Enter']]
     : [['1','2','3','4','5','6','7','8','9','0','-','='], ['й','ц','у','к','е','н','г','ш','щ','з','х','ъ'], ['ф','ы','в','а','п','р','о','л','д','ж','э','Backspace'], ['я','ч','с','м','и','т','ь','б','ю','.','Enter']];
   keyboardKeys.innerHTML = '';
-  for (const key of rows.flat()) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = `keyboard-key focusable${['Backspace','Enter'].includes(key) ? ' wide' : ''}`;
-    button.dataset.key = key;
-    button.textContent = key === 'Backspace' ? '⌫' : key === 'Enter' ? '↵' : key;
-    button.addEventListener('click', () => typeKeyboardKey(key));
-    keyboardKeys.appendChild(button);
+  for (const keys of rows) {
+    const row = document.createElement('div');
+    row.className = 'keyboard-row';
+    for (const key of keys) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `keyboard-key focusable${['Backspace','Enter'].includes(key) ? ' wide' : ''}`;
+      button.dataset.key = key;
+      button.textContent = key === 'Backspace' ? '⌫' : key === 'Enter' ? '↵' : key;
+      button.addEventListener('click', () => typeKeyboardKey(key));
+      row.appendChild(button);
+    }
+    keyboardKeys.appendChild(row);
   }
+  const spaceRow = document.createElement('div');
+  spaceRow.className = 'keyboard-row keyboard-space-row';
   const space = document.createElement('button');
   space.type = 'button';
   space.className = 'keyboard-key space focusable';
   space.dataset.key = ' ';
   space.textContent = currentLanguage === 'en' ? 'Space' : 'Пробел';
   space.addEventListener('click', () => typeKeyboardKey(' '));
-  keyboardKeys.appendChild(space);
+  spaceRow.appendChild(space);
+  keyboardKeys.appendChild(spaceRow);
 }
 
 function typeKeyboardKey(key) {
@@ -564,7 +574,8 @@ function setKeyboardVisible(visible, input = null) {
     renderKeyboard();
     if (input) {
       focusables = availableFocusables(onscreenKeyboard);
-      focusIndex = 0;
+      focusIndex = Math.max(0, focusables.findIndex((element) => element.classList.contains('keyboard-key')));
+      requestAnimationFrame(() => input.scrollIntoView({ block: 'center', inline: 'nearest' }));
     } else {
       refreshFocusables(0);
     }
@@ -836,8 +847,11 @@ document.addEventListener('keydown', (event) => {
   }
   const action = keyActions.get(event.key) || keyActions.get(event.code);
   if (!action) return;
-  const typing = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
-  if (typing && action !== 'back' && action !== 'home' && action !== 'power') return;
+  const activeInput = document.activeElement;
+  const textEditing = activeInput instanceof HTMLTextAreaElement
+    || (activeInput instanceof HTMLInputElement && !['range', 'color', 'checkbox', 'radio', 'button', 'submit'].includes(activeInput.type));
+  if (textEditing && (event.key === 'Backspace' || !['back', 'home', 'power'].includes(action))) return;
+  if (activeInput instanceof HTMLInputElement && activeInput.type === 'range' && ['left', 'right'].includes(action)) return;
   if (event.repeat && ['select', 'back', 'home', 'menu', 'power'].includes(action)) return;
   event.preventDefault();
   handleInputAction(action);
@@ -848,6 +862,19 @@ document.addEventListener('focusin', (event) => {
   if (input instanceof HTMLInputElement && !['range', 'color', 'checkbox', 'radio'].includes(input.type)) {
     lastTextInput = input;
     setKeyboardVisible(true, input);
+    return;
+  }
+  if (input instanceof Element && input.classList.contains('focusable')) {
+    const scope = navigationScope();
+    const scopedFocusables = availableFocusables(scope);
+    const index = scopedFocusables.indexOf(input);
+    if (index >= 0) {
+      focusables = scopedFocusables;
+      focusIndex = index;
+      document.querySelectorAll('.focused').forEach((element) => element.classList.remove('focused'));
+      input.classList.add('focused');
+      rememberedFocus.set(scope, input);
+    }
   }
 });
 

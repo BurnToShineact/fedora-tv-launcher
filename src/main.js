@@ -6,7 +6,6 @@ const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
 let browserView;
-let externalControlWindow;
 let browserVisible = false;
 let keyboardVisible = false;
 let updateState = { status: 'idle', version: app.getVersion(), progress: 0, message: '' };
@@ -20,6 +19,7 @@ const isTvSession = process.argv.includes('--tv-session') || process.env.FEDORA_
 const updatesEnabled = app.isPackaged;
 const BROWSER_TOOLBAR_HEIGHT = 82;
 const KEYBOARD_HEIGHT = 292;
+const KEYBOARD_VIEWPORT_RATIO = 0.48;
 
 
 function sendUpdateState(patch = {}) {
@@ -439,7 +439,7 @@ function sendBrowserState(extra = {}) {
 function resizeBrowserView() {
   if (!mainWindow || !browserView || !browserVisible) return;
   const [width, height] = mainWindow.getContentSize();
-  const keyboardHeight = keyboardVisible ? KEYBOARD_HEIGHT : 0;
+  const keyboardHeight = keyboardVisible ? Math.min(KEYBOARD_HEIGHT, Math.floor(height * KEYBOARD_VIEWPORT_RATIO)) : 0;
   browserView.setBounds({ x: 0, y: BROWSER_TOOLBAR_HEIGHT, width, height: Math.max(1, height - BROWSER_TOOLBAR_HEIGHT - keyboardHeight) });
 }
 
@@ -496,9 +496,7 @@ function ensureBrowserView() {
 function showLauncher() {
   browserVisible = false;
   keyboardVisible = false;
-  externalControlWindow?.hide();
   if (systemAppMode) {
-    globalShortcut.unregister('Home');
     systemAppMode = false;
   }
   if (browserView && mainWindow?.contentView.children.includes(browserView)) {
@@ -508,36 +506,6 @@ function showLauncher() {
   mainWindow?.webContents.focus();
   sendBrowserState({ visible: false });
   mainWindow?.webContents.send('launcher:home');
-}
-
-function showExternalControl() {
-  if (!externalControlWindow || externalControlWindow.isDestroyed()) {
-    externalControlWindow = new BrowserWindow({
-      title: 'Fedora TV Return',
-      width: 210,
-      height: 64,
-      x: 24,
-      y: 24,
-      frame: false,
-      transparent: true,
-      resizable: false,
-      alwaysOnTop: true,
-      skipTaskbar: true,
-      focusable: true,
-      webPreferences: {
-        preload: path.join(__dirname, 'external-preload.js'),
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true
-      }
-    });
-    externalControlWindow.setAlwaysOnTop(true, 'screen-saver');
-    externalControlWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-    externalControlWindow.loadFile(rendererPath('external-control.html'));
-    externalControlWindow.on('closed', () => { externalControlWindow = null; });
-  }
-  externalControlWindow.show();
-  externalControlWindow.moveTop();
 }
 
 function requestLauncherAction(action) {
@@ -579,8 +547,6 @@ function createWindow() {
   mainWindow.on('closed', () => {
     browserView?.webContents.close();
     browserView = null;
-    externalControlWindow?.close();
-    externalControlWindow = null;
     mainWindow = null;
   });
 
@@ -704,19 +670,18 @@ ipcMain.handle('app:open', async (_event, selectedApp) => {
   if (storedApp.type === 'system') {
     const installedApp = installedDesktopApps().find((item) => item.desktopId === storedApp.desktopId);
     if (!installedApp) return { ok: false, message: 'Приложение не найдено в системе' };
+    systemAppMode = true;
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.setKiosk(false);
       mainWindow.setFullScreen(false);
+      mainWindow.hide();
     }
     const result = await runSystemCommand('gio', ['launch', installedApp.filePath]);
     if (!result.ok) {
+      systemAppMode = false;
       restoreKioskWindow();
       return result;
     }
-    systemAppMode = true;
-    globalShortcut.register('Home', showLauncher);
-    mainWindow?.minimize();
-    showExternalControl();
     return { ...result, external: true };
   }
   if (!/^https:\/\//i.test(storedApp.url || '')) return { ok: false, message: 'Разрешены только HTTPS-адреса' };
