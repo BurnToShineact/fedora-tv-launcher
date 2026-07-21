@@ -3,6 +3,12 @@ set -eu
 
 # labwc запускает этот файл уже после создания Wayland-сокета, поэтому
 # PolicyKit-агент может показать системное окно авторизации поверх оболочки.
+# Передаём Wayland-окружение D-Bus-активируемым приложениям. Без этого GNOME
+# и Flatpak-приложения могли запуститься без поверхности и оставить чёрный экран.
+if command -v dbus-update-activation-environment >/dev/null 2>&1; then
+  dbus-update-activation-environment --systemd WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE FEDORA_TV_SESSION >/dev/null 2>&1 || true
+fi
+
 if [ -x /usr/libexec/lxqt-policykit-agent ]; then
   /usr/libexec/lxqt-policykit-agent >/dev/null 2>&1 &
 fi

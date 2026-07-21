@@ -418,6 +418,18 @@ function installedDesktopApps() {
   return [...results.values()].sort((a, b) => a.title.localeCompare(b.title, 'ru'));
 }
 
+function findInstalledDesktopApp(desktopId) {
+  if (!/^[a-z0-9_.@+-]+\.desktop$/i.test(desktopId || '')) return null;
+  for (const root of desktopDataRoots()) {
+    const filePath = path.join(root, 'applications', desktopId);
+    const parsed = readDesktopEntry(filePath);
+    if (parsed) return { desktopId, filePath, ...parsed };
+  }
+  // Вложенные desktop-файлы встречаются редко; полный обход остаётся только
+  // запасным путём и больше не задерживает обычный запуск каждой плитки.
+  return installedDesktopApps().find((item) => item.desktopId === desktopId) || null;
+}
+
 function accentForDesktopId(desktopId) {
   const colors = ['#2563eb', '#7c3aed', '#059669', '#ea580c', '#0f766e', '#475569'];
   let hash = 0;
@@ -695,23 +707,21 @@ ipcMain.handle('app:open', async (_event, selectedApp) => {
   if (!storedApp) return { ok: false, message: 'Приложение не найдено' };
   if (storedApp.action === 'settings') return { ok: true, action: 'settings' };
   if (storedApp.type === 'system') {
-    const installedApp = installedDesktopApps().find((item) => item.desktopId === storedApp.desktopId);
+    const installedApp = findInstalledDesktopApp(storedApp.desktopId);
     if (!installedApp) return { ok: false, message: 'Приложение не найдено в системе' };
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.setKiosk(false);
-      mainWindow.setFullScreen(false);
-      mainWindow.show();
-      mainWindow.focus();
-    }
+    // Оболочка остаётся полноэкранным фоном. Раньше снятие kiosk/fullscreen
+    // заставляло labwc перестраивать её окно, из-за чего пользователь видел
+    // сворачивание или чёрный экран до появления нативного приложения.
+    restoreKioskWindow();
+    systemAppMode = true;
     const result = await runSystemCommand('gio', ['launch', installedApp.filePath]);
     if (!result.ok) {
+      systemAppMode = false;
       restoreKioskWindow();
       return result;
     }
-    // Оставляем живую оболочку фоном. Новое окно получает фокус от композитора,
-    // а при ошибке отображения пользователь не остаётся на пустом чёрном экране.
-    systemAppMode = true;
-    mainWindow?.blur();
+    // Новое окно получает фокус от композитора, а Home поднимает уже готовую
+    // оболочку, не создавая и не перезагружая её заново.
     return { ...result, external: true };
   }
   if (!/^https:\/\//i.test(storedApp.url || '')) return { ok: false, message: 'Разрешены только HTTPS-адреса' };
@@ -786,9 +796,13 @@ ipcMain.handle('system:action', async (_event, action) => {
   }
   if (action === 'poweroff') return runSystemCommand('systemctl', ['poweroff']);
   if (action === 'reboot') return runSystemCommand('systemctl', ['reboot']);
-  if (action === 'volume-up') return runSystemCommand('wpctl', ['set-volume', '@DEFAULT_AUDIO_SINK@', '5%+']);
-  if (action === 'volume-down') return runSystemCommand('wpctl', ['set-volume', '@DEFAULT_AUDIO_SINK@', '5%-']);
-  if (action === 'mute') return runSystemCommand('wpctl', ['set-mute', '@DEFAULT_AUDIO_SINK@', 'toggle']);
+  if (['volume-up', 'volume-down', 'mute'].includes(action)) {
+    const args = action === 'mute'
+      ? ['set-mute', '@DEFAULT_AUDIO_SINK@', 'toggle']
+      : ['set-volume', '@DEFAULT_AUDIO_SINK@', action === 'volume-up' ? '5%+' : '5%-'];
+    const result = await runSystemCommand('wpctl', args);
+    return result.ok ? { ok: true, audio: await getAudioState() } : result;
+  }
   return { ok: false, message: 'Неизвестное действие' };
 });
 
@@ -817,8 +831,10 @@ async function getAudioState() {
 }
 
 async function getWifiState(rescan = false) {
-  const enabledResult = await runSystemCommand('nmcli', ['-t', '-f', 'WIFI', 'general']);
-  const listResult = await runSystemCommand('nmcli', ['-t', '--escape', 'yes', '-f', 'IN-USE,SSID,SIGNAL,SECURITY', 'device', 'wifi', 'list', '--rescan', rescan ? 'yes' : 'auto']);
+  const [enabledResult, listResult] = await Promise.all([
+    runSystemCommand('nmcli', ['-t', '-f', 'WIFI', 'general']),
+    runSystemCommand('nmcli', ['-t', '--escape', 'yes', '-f', 'IN-USE,SSID,SIGNAL,SECURITY', 'device', 'wifi', 'list', '--rescan', rescan ? 'yes' : 'auto'])
+  ]);
   if (!listResult.ok) return listResult;
   const networks = listResult.message.split(/\r?\n/).filter(Boolean).map((line) => {
     const [active, ssid, signal, security] = splitNmcliLine(line);
@@ -827,12 +843,12 @@ async function getWifiState(rescan = false) {
   return { ok: true, enabled: /enabled/i.test(enabledResult.message), networks };
 }
 
-ipcMain.handle('settings:get', async () => ({
-  ok: true,
-  preferences: readSettings(),
-  audio: await getAudioState(),
-  wifi: await getWifiState(false)
-}));
+ipcMain.handle('settings:get', async () => {
+  const preferences = readSettings();
+  const [audio, wifi] = await Promise.all([getAudioState(), getWifiState(false)]);
+  return { ok: true, preferences, audio, wifi };
+});
+ipcMain.handle('settings:get-preferences', () => readSettings());
 ipcMain.handle('audio:set-volume', async (_event, volume) => {
   const safeVolume = Math.max(0, Math.min(100, Number(volume) || 0));
   const result = await runSystemCommand('wpctl', ['set-volume', '@DEFAULT_AUDIO_SINK@', `${safeVolume}%`]);

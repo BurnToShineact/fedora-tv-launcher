@@ -55,6 +55,19 @@ const keyboardToggle = document.getElementById('keyboard-toggle');
 const settingsShortcut = document.getElementById('settings-shortcut');
 const topbarNetwork = document.getElementById('topbar-network');
 const topbarVolume = document.getElementById('topbar-volume');
+const quickPanel = document.getElementById('quick-panel');
+const quickPanelClose = document.getElementById('quick-panel-close');
+const quickVolumeSlider = document.getElementById('quick-volume-slider');
+const quickVolumeValue = document.getElementById('quick-volume-value');
+const quickMuteToggle = document.getElementById('quick-mute-toggle');
+const quickNetworkState = document.getElementById('quick-network-state');
+const quickWifiToggle = document.getElementById('quick-wifi-toggle');
+const quickWifiScan = document.getElementById('quick-wifi-scan');
+const quickWifiList = document.getElementById('quick-wifi-list');
+const quickWifiPasswordForm = document.getElementById('quick-wifi-password-form');
+const quickWifiPassword = document.getElementById('quick-wifi-password');
+const quickWifiPasswordLabel = document.getElementById('quick-wifi-password-label');
+const quickWifiPasswordCancel = document.getElementById('quick-wifi-password-cancel');
 const settingsKeyboardToggle = document.getElementById('settings-keyboard-toggle');
 const onscreenKeyboard = document.getElementById('onscreen-keyboard');
 const keyboardKeys = document.getElementById('keyboard-keys');
@@ -82,8 +95,10 @@ let browserOpen = false;
 let keyboardOpen = false;
 let currentLanguage = 'ru';
 let selectedNetwork = null;
+let quickSelectedNetwork = null;
 let lastTextInput = null;
 let latestAudioState = null;
+let latestWifiState = null;
 const rememberedFocus = new WeakMap();
 const overlayReturnFocus = new WeakMap();
 
@@ -115,6 +130,7 @@ function applyLanguage(language) {
   keyboardLanguage.textContent = english ? 'English' : 'Русский';
   renderKeyboard();
   if (latestAudioState) renderAudio(latestAudioState);
+  if (latestWifiState) renderWifi(latestWifiState);
   updateClock();
 }
 
@@ -246,6 +262,7 @@ function showToast(message) {
 
 function activeOverlay() {
   if (!backdrop.hidden) return backdrop;
+  if (!quickPanel.hidden) return quickPanel;
   if (!addBackdrop.hidden) return addBackdrop;
   if (!manageBackdrop.hidden) return manageBackdrop;
   return null;
@@ -465,6 +482,7 @@ function renderManageList() {
 }
 
 function openManagePanel() {
+  if (!quickPanel.hidden) closeQuickPanel();
   overlayReturnFocus.set(manageBackdrop, document.activeElement);
   renderManageList();
   manageBackdrop.hidden = false;
@@ -478,31 +496,64 @@ function closeManagePanel() {
   refreshFocusables(overlayReturnFocus.get(manageBackdrop) || 0);
 }
 
+function openQuickPanel(section = 'sound') {
+  overlayReturnFocus.set(quickPanel, document.activeElement);
+  quickPanel.dataset.section = section;
+  quickPanel.hidden = false;
+  document.body.classList.add('quick-panel-open');
+  topbarVolume.setAttribute('aria-expanded', String(section === 'sound'));
+  topbarNetwork.setAttribute('aria-expanded', String(section === 'wifi'));
+  const target = section === 'wifi' ? quickWifiToggle : quickVolumeSlider;
+  requestAnimationFrame(() => refreshFocusables(target));
+  loadSystemSettings().catch((error) => showToast(error.message));
+}
+
+function closeQuickPanel() {
+  if (keyboardOpen) setKeyboardVisible(false);
+  quickPanel.hidden = true;
+  document.body.classList.remove('quick-panel-open');
+  topbarVolume.setAttribute('aria-expanded', 'false');
+  topbarNetwork.setAttribute('aria-expanded', 'false');
+  refreshFocusables(overlayReturnFocus.get(quickPanel) || 0);
+}
+
 function renderAudio(state = {}) {
   if (!state.ok) return;
   latestAudioState = state;
   volumeSlider.value = state.volume;
   volumeValue.textContent = `${state.volume}%`;
+  quickVolumeSlider.value = state.volume;
+  quickVolumeValue.textContent = state.muted ? (currentLanguage === 'en' ? 'Muted' : 'Без звука') : `${state.volume}%`;
   muteToggle.textContent = state.muted ? t('unmute') : t('mute');
   muteToggle.classList.toggle('active', Boolean(state.muted));
+  quickMuteToggle.textContent = state.muted ? t('unmute') : t('mute');
+  quickMuteToggle.classList.toggle('active', Boolean(state.muted));
   topbarVolume.querySelector('i').textContent = state.muted ? '×' : '♪';
   topbarVolume.querySelector('b').textContent = state.muted ? (currentLanguage === 'en' ? 'Muted' : 'Без звука') : `${state.volume}%`;
   topbarVolume.classList.toggle('inactive', Boolean(state.muted));
 }
 
 function renderWifi(state = {}) {
+  latestWifiState = state;
   wifiToggle.setAttribute('aria-checked', String(Boolean(state.enabled)));
+  quickWifiToggle.setAttribute('aria-checked', String(Boolean(state.enabled)));
   const activeNetwork = state.networks?.find((network) => network.active);
   topbarNetwork.querySelector('i').textContent = state.enabled ? '⌁' : '×';
   topbarNetwork.querySelector('b').textContent = activeNetwork?.ssid || (state.enabled ? 'Wi‑Fi' : (currentLanguage === 'en' ? 'Off' : 'Выкл.'));
   topbarNetwork.classList.toggle('inactive', !state.enabled);
-  wifiList.innerHTML = '';
+  quickNetworkState.textContent = activeNetwork?.ssid || (state.enabled ? (currentLanguage === 'en' ? 'Select a network' : 'Выберите сеть') : t('wifiOff'));
+  renderWifiNetworks(wifiList, state, 'settings');
+  renderWifiNetworks(quickWifiList, state, 'quick');
+}
+
+function renderWifiNetworks(container, state, source) {
+  container.innerHTML = '';
   if (!state.ok || !state.enabled) {
-    wifiList.innerHTML = `<div class="empty-state">${state.enabled === false ? t('wifiOff') : (state.message || t('noNetworks'))}</div>`;
+    renderWifiEmptyState(container, state.enabled === false ? t('wifiOff') : (state.message || t('noNetworks')));
     return;
   }
   if (!state.networks?.length) {
-    wifiList.innerHTML = `<div class="empty-state">${t('noNetworks')}</div>`;
+    renderWifiEmptyState(container, t('noNetworks'));
     return;
   }
   for (const network of state.networks.slice(0, 12)) {
@@ -512,24 +563,36 @@ function renderWifi(state = {}) {
     button.querySelector('strong').textContent = network.ssid;
     button.querySelector('.wifi-detail').textContent = network.active ? t('connected') : (network.secure ? t('secured') : t('open'));
     button.querySelector('b').textContent = `${network.signal}%`;
-    button.addEventListener('click', () => selectNetwork(network));
-    wifiList.appendChild(button);
+    button.addEventListener('click', () => selectNetwork(network, source));
+    container.appendChild(button);
   }
 }
 
-async function selectNetwork(network) {
+function renderWifiEmptyState(container, message) {
+  const empty = document.createElement('div');
+  empty.className = 'empty-state';
+  empty.textContent = message;
+  container.appendChild(empty);
+}
+
+async function selectNetwork(network, source = 'settings') {
   if (network.active) return showToast(t('connected'));
-  selectedNetwork = network;
   if (!network.secure) {
     const result = await window.tv.connectWifi({ ssid: network.ssid, password: '' });
     if (!result?.ok) return showToast(result?.message || 'Wi‑Fi error');
     renderWifi(result);
     return showToast(currentLanguage === 'en' ? 'Connected' : 'Подключено');
   }
-  wifiPasswordLabel.textContent = `${t('password')} «${network.ssid}»`;
-  wifiPassword.value = '';
-  wifiPasswordForm.hidden = false;
-  setKeyboardVisible(true, wifiPassword);
+  const quick = source === 'quick';
+  if (quick) quickSelectedNetwork = network;
+  else selectedNetwork = network;
+  const label = quick ? quickWifiPasswordLabel : wifiPasswordLabel;
+  const input = quick ? quickWifiPassword : wifiPassword;
+  const form = quick ? quickWifiPasswordForm : wifiPasswordForm;
+  label.textContent = `${t('password')} «${network.ssid}»`;
+  input.value = '';
+  form.hidden = false;
+  setKeyboardVisible(true, input);
 }
 
 async function loadSystemSettings() {
@@ -626,6 +689,7 @@ function requestDelete(app) {
 
 async function activate(element) {
   if (!element) return;
+  if (!quickPanel.hidden) closeQuickPanel();
   if (element.dataset.special === 'add') return openAddPanel();
   if (element.dataset.app) {
     const selectedApp = JSON.parse(element.dataset.app);
@@ -669,6 +733,7 @@ async function renderApps() {
     button.querySelector('.title').textContent = currentLanguage === 'en' ? (app.titleEn || builtInEnglishTitles[app.id] || app.title) : app.title;
     button.querySelector('.kind').textContent = app.type === 'system' ? t('systemApp') : app.action === 'settings' ? t('settingsKind') : t('webApp');
     button.addEventListener('click', () => activate(button));
+    makeCardInteractive(button);
     grid.appendChild(button);
   }
   const addButton = document.createElement('button');
@@ -677,11 +742,28 @@ async function renderApps() {
   addButton.dataset.special = 'add';
   addButton.innerHTML = `<span class="icon">＋</span><span class="card-copy"><span class="title">${t('addApp')}</span><span class="kind">${t('addKind')}</span></span>`;
   addButton.addEventListener('click', () => activate(addButton));
+  makeCardInteractive(addButton);
   grid.appendChild(addButton);
 }
 
+function makeCardInteractive(card) {
+  card.addEventListener('pointermove', (event) => {
+    if (event.pointerType === 'touch') return;
+    const rect = card.getBoundingClientRect();
+    card.style.setProperty('--spot-x', `${((event.clientX - rect.left) / rect.width) * 100}%`);
+    card.style.setProperty('--spot-y', `${((event.clientY - rect.top) / rect.height) * 100}%`);
+  });
+  card.addEventListener('pointerdown', () => card.classList.add('pressed'));
+  for (const eventName of ['pointerup', 'pointercancel', 'pointerleave']) {
+    card.addEventListener(eventName, () => card.classList.remove('pressed'));
+  }
+}
+
 async function loadApps() {
-  await loadSystemSettings();
+  // Язык и плитки читаются из локальных файлов и появляются сразу. Медленные
+  // запросы к NetworkManager, PipeWire и updater не блокируют первый экран.
+  const preferences = await window.tv.getPreferences();
+  applyLanguage(preferences?.language);
   await renderApps();
   document.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', () => activate(button)));
   document.querySelectorAll('[data-add-close]').forEach((button) => button.addEventListener('click', closeAddPanel));
@@ -748,6 +830,15 @@ async function loadApps() {
   browserRefreshButton.addEventListener('click', () => window.tv.refresh());
   browserKeyboardButton.addEventListener('click', () => setKeyboardVisible(!keyboardOpen));
   keyboardToggle.addEventListener('click', () => setKeyboardVisible(!keyboardOpen));
+  topbarVolume.addEventListener('click', () => {
+    if (!quickPanel.hidden && quickPanel.dataset.section === 'sound') return closeQuickPanel();
+    openQuickPanel('sound');
+  });
+  topbarNetwork.addEventListener('click', () => {
+    if (!quickPanel.hidden && quickPanel.dataset.section === 'wifi') return closeQuickPanel();
+    openQuickPanel('wifi');
+  });
+  quickPanelClose.addEventListener('click', closeQuickPanel);
   settingsShortcut.addEventListener('click', openManagePanel);
   settingsKeyboardToggle.addEventListener('click', () => setKeyboardVisible(!keyboardOpen));
   keyboardClose.addEventListener('click', () => setKeyboardVisible(false));
@@ -757,7 +848,21 @@ async function loadApps() {
     if (!result?.ok) return showToast(result?.message || 'Audio error');
     renderAudio(result);
   });
+  quickVolumeSlider.addEventListener('input', () => {
+    quickVolumeValue.textContent = `${quickVolumeSlider.value}%`;
+    topbarVolume.querySelector('b').textContent = `${quickVolumeSlider.value}%`;
+  });
+  quickVolumeSlider.addEventListener('change', async () => {
+    const result = await window.tv.setVolume(quickVolumeSlider.value);
+    if (!result?.ok) return showToast(result?.message || 'Audio error');
+    renderAudio(result);
+  });
   muteToggle.addEventListener('click', async () => {
+    const result = await window.tv.toggleMute();
+    if (!result?.ok) return showToast(result?.message || 'Audio error');
+    renderAudio(result);
+  });
+  quickMuteToggle.addEventListener('click', async () => {
     const result = await window.tv.toggleMute();
     if (!result?.ok) return showToast(result?.message || 'Audio error');
     renderAudio(result);
@@ -770,6 +875,14 @@ async function loadApps() {
     renderWifi(result);
     refreshFocusables(wifiToggle);
   });
+  quickWifiToggle.addEventListener('click', async () => {
+    quickWifiToggle.disabled = true;
+    const result = await window.tv.toggleWifi(quickWifiToggle.getAttribute('aria-checked') !== 'true');
+    quickWifiToggle.disabled = false;
+    if (!result?.ok) return showToast(result?.message || 'Wi‑Fi error');
+    renderWifi(result);
+    refreshFocusables(quickWifiToggle);
+  });
   wifiScan.addEventListener('click', async () => {
     wifiScan.disabled = true;
     const result = await window.tv.scanWifi();
@@ -777,6 +890,14 @@ async function loadApps() {
     if (!result?.ok) return showToast(result?.message || 'Wi‑Fi error');
     renderWifi(result);
     refreshFocusables(wifiScan);
+  });
+  quickWifiScan.addEventListener('click', async () => {
+    quickWifiScan.disabled = true;
+    const result = await window.tv.scanWifi();
+    quickWifiScan.disabled = false;
+    if (!result?.ok) return showToast(result?.message || 'Wi‑Fi error');
+    renderWifi(result);
+    refreshFocusables(quickWifiScan);
   });
   wifiPasswordForm.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -789,15 +910,32 @@ async function loadApps() {
     showToast(currentLanguage === 'en' ? 'Connected' : 'Подключено');
   });
   wifiPasswordCancel.addEventListener('click', () => { wifiPasswordForm.hidden = true; setKeyboardVisible(false); });
+  quickWifiPasswordForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!quickSelectedNetwork) return;
+    const result = await window.tv.connectWifi({ ssid: quickSelectedNetwork.ssid, password: quickWifiPassword.value });
+    if (!result?.ok) return showToast(result?.message || 'Wi‑Fi error');
+    quickWifiPasswordForm.hidden = true;
+    setKeyboardVisible(false);
+    renderWifi(result);
+    showToast(currentLanguage === 'en' ? 'Connected' : 'Подключено');
+  });
+  quickWifiPasswordCancel.addEventListener('click', () => { quickWifiPasswordForm.hidden = true; setKeyboardVisible(false); });
   document.querySelectorAll('[data-language]').forEach((button) => button.addEventListener('click', async () => {
     await window.tv.setLanguage(button.dataset.language);
     applyLanguage(button.dataset.language);
     await renderApps();
     refreshFocusables(button);
   }));
-  await initializeBackground();
-  await initializeUpdater();
   refreshFocusables(grid.querySelector('.app-card'));
+  Promise.allSettled([
+    initializeBackground(),
+    initializeUpdater(),
+    loadSystemSettings()
+  ]).then((results) => {
+    const rejected = results.find((result) => result.status === 'rejected');
+    if (rejected) showToast(rejected.reason?.message || 'Не удалось загрузить часть системных настроек');
+  });
 }
 
 function renderAppIcon(container, app, fallback = null) {
@@ -847,8 +985,12 @@ const keyActions = new Map([
 function closeAllOverlays() {
   if (keyboardOpen) setKeyboardVisible(false);
   backdrop.hidden = true;
+  quickPanel.hidden = true;
   addBackdrop.hidden = true;
   manageBackdrop.hidden = true;
+  document.body.classList.remove('quick-panel-open');
+  topbarVolume.setAttribute('aria-expanded', 'false');
+  topbarNetwork.setAttribute('aria-expanded', 'false');
   confirmHandler = null;
   window.tv.setConfirmationVisible(false);
 }
@@ -859,6 +1001,7 @@ async function handleInputAction(action) {
   if (action === 'back') {
     if (keyboardOpen) return setKeyboardVisible(false);
     if (!backdrop.hidden) return closeConfirm();
+    if (!quickPanel.hidden) return closeQuickPanel();
     if (!addBackdrop.hidden) return closeAddPanel();
     if (!manageBackdrop.hidden) return closeManagePanel();
     if (browserOpen) return window.tv.focusBrowser();
@@ -874,7 +1017,11 @@ async function handleInputAction(action) {
     return;
   }
   if (action === 'power') return requestSystemAction('poweroff');
-  if (['volume-up', 'volume-down', 'mute'].includes(action)) return window.tv.systemAction(action);
+  if (['volume-up', 'volume-down', 'mute'].includes(action)) {
+    const result = await window.tv.systemAction(action);
+    if (result?.audio) renderAudio(result.audio);
+    return result;
+  }
   if (['play-pause', 'next', 'previous', 'stop'].includes(action)) return window.tv.mediaAction(action);
 }
 

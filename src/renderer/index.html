@@ -56,14 +56,44 @@
       </div>
       <div class="status">
         <div class="system-pills" aria-label="Состояние системы">
-          <span class="status-pill" id="topbar-network"><i>◌</i><b>Wi‑Fi</b></span>
-          <span class="status-pill" id="topbar-volume"><i>♪</i><b>—</b></span>
+          <button class="status-pill focusable" id="topbar-network" type="button" aria-label="Выбрать сеть Wi‑Fi" aria-expanded="false"><i>◌</i><b>Wi‑Fi</b></button>
+          <button class="status-pill focusable" id="topbar-volume" type="button" aria-label="Настроить громкость" aria-expanded="false"><i>♪</i><b>—</b></button>
         </div>
         <button class="topbar-button focusable" id="keyboard-toggle" aria-label="Экранная клавиатура" title="Экранная клавиатура">⌨</button>
         <button class="topbar-button focusable" id="settings-shortcut" aria-label="Настройки" title="Настройки">⚙</button>
         <span class="date" id="date"></span><strong id="clock">00:00</strong>
       </div>
     </header>
+
+    <aside class="quick-panel" id="quick-panel" role="dialog" aria-modal="false" aria-labelledby="quick-panel-title" hidden>
+      <div class="quick-panel-header">
+        <div><p class="eyebrow">Быстрые настройки</p><h2 id="quick-panel-title">Управление системой</h2></div>
+        <button class="icon-button focusable" id="quick-panel-close" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <section class="quick-section" id="quick-sound-section" data-nav-zone="quick-sound" data-nav-order="0">
+        <div class="quick-section-heading"><span class="quick-icon" aria-hidden="true">♪</span><div><strong data-i18n="soundTitle">Громкость</strong><span id="quick-volume-value">—</span></div></div>
+        <div class="quick-volume-control">
+          <span aria-hidden="true">−</span>
+          <input class="focusable" id="quick-volume-slider" type="range" min="0" max="100" step="5" value="50" aria-label="Громкость">
+          <span aria-hidden="true">＋</span>
+        </div>
+        <button class="quick-action focusable" id="quick-mute-toggle" type="button" data-i18n="mute">Выключить звук</button>
+      </section>
+      <section class="quick-section" id="quick-wifi-section" data-nav-zone="quick-wifi" data-nav-order="1">
+        <div class="quick-section-heading">
+          <span class="quick-icon" aria-hidden="true">⌁</span>
+          <div><strong data-i18n="networkTitle">Беспроводная сеть</strong><span id="quick-network-state">Wi‑Fi</span></div>
+          <button class="switch focusable" id="quick-wifi-toggle" type="button" role="switch" aria-label="Включить или выключить Wi‑Fi" aria-checked="false"><span></span></button>
+        </div>
+        <div class="quick-actions"><button class="quick-action focusable" id="quick-wifi-scan" type="button" data-i18n="scan">Обновить список</button></div>
+        <div class="wifi-list quick-wifi-list" id="quick-wifi-list" aria-live="polite"></div>
+        <form class="wifi-password quick-password" id="quick-wifi-password-form" hidden>
+          <label><span id="quick-wifi-password-label">Пароль</span><input class="focusable" id="quick-wifi-password" type="password" autocomplete="current-password"></label>
+          <button class="dialog-button focusable" type="submit" data-i18n="connect">Подключиться</button>
+          <button class="dialog-button secondary focusable" type="button" id="quick-wifi-password-cancel" data-i18n="cancel">Отмена</button>
+        </form>
+      </section>
+    </aside>
 
     <section class="hero">
       <div class="hero-copy">

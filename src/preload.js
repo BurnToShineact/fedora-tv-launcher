@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('tv', {
   mediaAction: (action) => ipcRenderer.invoke('media:action', action),
   setBrowserKeyboard: (visible) => ipcRenderer.invoke('browser:keyboard', visible),
   keyboardInput: (input) => ipcRenderer.invoke('keyboard:input', input),
+  getPreferences: () => ipcRenderer.invoke('settings:get-preferences'),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setVolume: (volume) => ipcRenderer.invoke('audio:set-volume', volume),
   toggleMute: () => ipcRenderer.invoke('audio:toggle-mute'),
