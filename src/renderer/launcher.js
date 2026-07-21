@@ -26,6 +26,9 @@ const dateLabel = document.getElementById('date');
 const backdrop = document.getElementById('dialog-backdrop');
 const dialogTitle = document.getElementById('dialog-title');
 const dialogText = document.getElementById('dialog-text');
+const confirmationDialog = document.getElementById('confirmation-dialog');
+const dialogSymbol = document.getElementById('dialog-symbol');
+const dialogEyebrow = document.getElementById('dialog-eyebrow');
 const dialogConfirm = document.querySelector('[data-dialog="confirm"]');
 const dialogCancel = document.querySelector('[data-dialog="cancel"]');
 const addBackdrop = document.getElementById('add-app-backdrop');
@@ -49,6 +52,9 @@ const backgroundPreview = document.getElementById('background-preview');
 const backgroundChooseButton = document.getElementById('background-choose');
 const backgroundClearButton = document.getElementById('background-clear');
 const keyboardToggle = document.getElementById('keyboard-toggle');
+const settingsShortcut = document.getElementById('settings-shortcut');
+const topbarNetwork = document.getElementById('topbar-network');
+const topbarVolume = document.getElementById('topbar-volume');
 const settingsKeyboardToggle = document.getElementById('settings-keyboard-toggle');
 const onscreenKeyboard = document.getElementById('onscreen-keyboard');
 const keyboardKeys = document.getElementById('keyboard-keys');
@@ -98,9 +104,12 @@ function applyLanguage(language) {
   document.querySelectorAll('[data-i18n]').forEach((element) => { element.textContent = t(element.dataset.i18n); });
   document.querySelectorAll('[data-language]').forEach((button) => button.classList.toggle('selected', button.dataset.language === currentLanguage));
   const english = currentLanguage === 'en';
-  document.querySelector('.hero .eyebrow').textContent = english ? 'Home screen' : 'Домашний экран';
-  document.querySelector('.hero h1').textContent = english ? 'What shall we watch?' : 'Что будем смотреть?';
-  document.querySelector('.hero > p:last-child').textContent = english ? 'Arrows — navigate · OK — open · Back — return · Home — home screen.' : 'Стрелки — выбор · OK — открыть · Назад — вернуться · Home — главный экран.';
+  document.getElementById('hero-eyebrow').textContent = english ? 'Home screen' : 'Домашний экран';
+  document.getElementById('hero-title').textContent = english ? 'What shall we watch?' : 'Что будем смотреть?';
+  document.getElementById('hero-description').textContent = english ? 'Web services and Fedora apps — together in one place.' : 'Веб-сервисы и приложения Fedora — в одном месте.';
+  document.getElementById('hero-hints').innerHTML = english
+    ? '<span><kbd>← ↑ ↓ →</kbd><b>Navigate</b></span><span><kbd>OK</kbd><b>Open</b></span><span><kbd>Home</kbd><b>Home</b></span>'
+    : '<span><kbd>← ↑ ↓ →</kbd><b>Выбор</b></span><span><kbd>OK</kbd><b>Открыть</b></span><span><kbd>Home</kbd><b>Домой</b></span>';
   document.querySelector('.section-title h2').textContent = t('apps');
   document.getElementById('manage-title').textContent = t('settings');
   keyboardLanguage.textContent = english ? 'English' : 'Русский';
@@ -210,7 +219,8 @@ function requestUpdateInstall() {
         closeConfirm();
         showToast(result?.message || 'Не удалось установить обновление');
       }
-    }
+    },
+    { symbol: '↑', eyebrow: 'Обновление системы' }
   );
 }
 
@@ -335,19 +345,27 @@ function moveFocus(direction) {
   if (target) setFocus(target);
 }
 
-function openConfirm(title, text, confirmText, handler) {
+function openConfirm(title, text, confirmText, handler, options = {}) {
   overlayReturnFocus.set(backdrop, document.activeElement);
   dialogTitle.textContent = title;
   dialogText.textContent = text;
   dialogConfirm.textContent = confirmText;
+  dialogEyebrow.textContent = options.eyebrow || (currentLanguage === 'en' ? 'Confirmation required' : 'Нужно подтверждение');
+  dialogSymbol.textContent = options.symbol || '?';
+  confirmationDialog.dataset.tone = options.tone || 'default';
+  dialogConfirm.classList.toggle('danger', options.tone === 'danger');
+  dialogConfirm.disabled = false;
   confirmHandler = handler;
   backdrop.hidden = false;
+  window.tv.setConfirmationVisible(true);
   refreshFocusables(0);
 }
 
 function closeConfirm() {
   backdrop.hidden = true;
   confirmHandler = null;
+  dialogConfirm.disabled = false;
+  window.tv.setConfirmationVisible(false);
   refreshFocusables(overlayReturnFocus.get(backdrop) || 0);
 }
 
@@ -467,10 +485,17 @@ function renderAudio(state = {}) {
   volumeValue.textContent = `${state.volume}%`;
   muteToggle.textContent = state.muted ? t('unmute') : t('mute');
   muteToggle.classList.toggle('active', Boolean(state.muted));
+  topbarVolume.querySelector('i').textContent = state.muted ? '×' : '♪';
+  topbarVolume.querySelector('b').textContent = state.muted ? (currentLanguage === 'en' ? 'Muted' : 'Без звука') : `${state.volume}%`;
+  topbarVolume.classList.toggle('inactive', Boolean(state.muted));
 }
 
 function renderWifi(state = {}) {
   wifiToggle.setAttribute('aria-checked', String(Boolean(state.enabled)));
+  const activeNetwork = state.networks?.find((network) => network.active);
+  topbarNetwork.querySelector('i').textContent = state.enabled ? '⌁' : '×';
+  topbarNetwork.querySelector('b').textContent = activeNetwork?.ssid || (state.enabled ? 'Wi‑Fi' : (currentLanguage === 'en' ? 'Off' : 'Выкл.'));
+  topbarNetwork.classList.toggle('inactive', !state.enabled);
   wifiList.innerHTML = '';
   if (!state.ok || !state.enabled) {
     wifiList.innerHTML = `<div class="empty-state">${state.enabled === false ? t('wifiOff') : (state.message || t('noNetworks'))}</div>`;
@@ -596,7 +621,7 @@ function requestDelete(app) {
     manageBackdrop.hidden = false;
     refreshFocusables(0);
     showToast('Приложение удалено');
-  });
+  }, { tone: 'danger', symbol: '−' });
 }
 
 async function activate(element) {
@@ -626,7 +651,7 @@ function requestSystemAction(action) {
   openConfirm(title, message, confirmLabel, async () => {
     const result = await window.tv.systemAction(action);
     if (!result?.ok) { closeConfirm(); showToast(result?.message || 'Команда не выполнена'); }
-  });
+  }, { tone: action === 'logout' ? 'default' : 'danger', symbol: action === 'logout' ? '⇥' : action === 'reboot' ? '↻' : '⏻' });
 }
 
 async function renderApps() {
@@ -664,7 +689,19 @@ async function loadApps() {
   systemAppRefresh.addEventListener('click', loadSystemApps);
   document.querySelectorAll('[data-manage-close]').forEach((button) => button.addEventListener('click', closeManagePanel));
   dialogCancel.addEventListener('click', closeConfirm);
-  dialogConfirm.addEventListener('click', async () => { if (confirmHandler) await confirmHandler(); });
+  dialogConfirm.addEventListener('click', async () => {
+    if (!confirmHandler) return;
+    const handler = confirmHandler;
+    confirmHandler = null;
+    dialogConfirm.disabled = true;
+    try {
+      await window.tv.setConfirmationVisible(false);
+      await handler();
+    } catch (error) {
+      closeConfirm();
+      showToast(error?.message || 'Не удалось выполнить действие');
+    }
+  });
   document.querySelectorAll('.color-choice').forEach((button) => button.addEventListener('click', () => {
     selectedColor = button.dataset.color;
     document.querySelectorAll('.color-choice').forEach((choice) => choice.classList.toggle('selected', choice === button));
@@ -711,6 +748,7 @@ async function loadApps() {
   browserRefreshButton.addEventListener('click', () => window.tv.refresh());
   browserKeyboardButton.addEventListener('click', () => setKeyboardVisible(!keyboardOpen));
   keyboardToggle.addEventListener('click', () => setKeyboardVisible(!keyboardOpen));
+  settingsShortcut.addEventListener('click', openManagePanel);
   settingsKeyboardToggle.addEventListener('click', () => setKeyboardVisible(!keyboardOpen));
   keyboardClose.addEventListener('click', () => setKeyboardVisible(false));
   volumeSlider.addEventListener('input', () => { volumeValue.textContent = `${volumeSlider.value}%`; });
@@ -759,7 +797,7 @@ async function loadApps() {
   }));
   await initializeBackground();
   await initializeUpdater();
-  refreshFocusables(0);
+  refreshFocusables(grid.querySelector('.app-card'));
 }
 
 function renderAppIcon(container, app, fallback = null) {
@@ -812,6 +850,7 @@ function closeAllOverlays() {
   addBackdrop.hidden = true;
   manageBackdrop.hidden = true;
   confirmHandler = null;
+  window.tv.setConfirmationVisible(false);
 }
 
 async function handleInputAction(action) {

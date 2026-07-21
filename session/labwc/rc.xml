@@ -47,5 +47,12 @@
     <windowRule identifier="*" serverDecoration="no">
       <action name="Maximize" />
     </windowRule>
+    <windowRule identifier="lxqt-policykit-agent" serverDecoration="no">
+      <skipTaskbar>yes</skipTaskbar>
+      <skipWindowSwitcher>yes</skipWindowSwitcher>
+      <action name="UnMaximize" />
+      <action name="AutoPlace" />
+      <action name="ToggleAlwaysOnTop" />
+    </windowRule>
   </windowRules>
 </labwc_config>

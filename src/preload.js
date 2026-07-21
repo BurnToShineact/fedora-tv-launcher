@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('tv', {
   setLanguage: (language) => ipcRenderer.invoke('language:set', language),
   systemAction: (action) => ipcRenderer.invoke('system:action', action),
   toggleFullscreen: () => ipcRenderer.invoke('window:toggle-fullscreen'),
+  setConfirmationVisible: (visible) => ipcRenderer.invoke('window:confirmation-visible', visible),
   getAppInfo: () => ipcRenderer.invoke('app:get-info'),
   getUpdateState: () => ipcRenderer.invoke('update:get-state'),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),

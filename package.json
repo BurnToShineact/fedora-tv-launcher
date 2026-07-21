@@ -1,6 +1,6 @@
 {
   "name": "fedora-tv-os",
-  "version": "2.2.2",
+  "version": "2.2.3",
   "description": "Отдельная телевизионная Wayland-сессия для Fedora",
   "homepage": "https://github.com/BurnToShineact/fedora-tv-launcher",
   "repository": {

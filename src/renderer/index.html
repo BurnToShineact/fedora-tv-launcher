@@ -49,18 +49,33 @@
     </section>
   </div>
   <main class="launcher" id="launcher">
-    <header class="topbar">
+    <header class="topbar" data-nav-zone="quick" data-nav-order="0">
       <div class="brand">
         <div class="brand-mark">F</div>
         <div><strong>Fedora TV OS</strong><span data-i18n="brandSubtitle">Отдельная TV-сессия</span></div>
       </div>
-      <div class="status"><button class="topbar-button focusable" id="keyboard-toggle" aria-label="Экранная клавиатура">⌨</button><span id="date"></span><strong id="clock">00:00</strong></div>
+      <div class="status">
+        <div class="system-pills" aria-label="Состояние системы">
+          <span class="status-pill" id="topbar-network"><i>◌</i><b>Wi‑Fi</b></span>
+          <span class="status-pill" id="topbar-volume"><i>♪</i><b>—</b></span>
+        </div>
+        <button class="topbar-button focusable" id="keyboard-toggle" aria-label="Экранная клавиатура" title="Экранная клавиатура">⌨</button>
+        <button class="topbar-button focusable" id="settings-shortcut" aria-label="Настройки" title="Настройки">⚙</button>
+        <span class="date" id="date"></span><strong id="clock">00:00</strong>
+      </div>
     </header>
 
     <section class="hero">
-      <p class="eyebrow">Домашний экран</p>
-      <h1>Что будем смотреть?</h1>
-      <p>Стрелки — выбор · OK — открыть · Назад — вернуться · Home — главный экран.</p>
+      <div class="hero-copy">
+        <p class="eyebrow" id="hero-eyebrow">Домашний экран</p>
+        <h1 id="hero-title">Что будем смотреть?</h1>
+        <p id="hero-description">Веб-сервисы и приложения Fedora — в одном месте.</p>
+      </div>
+      <div class="hero-hints" id="hero-hints" aria-label="Подсказки управления">
+        <span><kbd>← ↑ ↓ →</kbd><b>Выбор</b></span>
+        <span><kbd>OK</kbd><b>Открыть</b></span>
+        <span><kbd>Home</kbd><b>Домой</b></span>
+      </div>
     </section>
 
     <section>
@@ -76,13 +91,18 @@
   </main>
 
   <div class="dialog-backdrop" id="dialog-backdrop" hidden>
-    <section class="dialog" role="dialog" aria-modal="true">
-      <h2 id="dialog-title">Подтверждение</h2>
-      <p id="dialog-text"></p>
+    <section class="dialog" id="confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="dialog-title" aria-describedby="dialog-text">
+      <div class="dialog-symbol" id="dialog-symbol" aria-hidden="true">?</div>
+      <div class="dialog-copy">
+        <p class="eyebrow" id="dialog-eyebrow">Нужно подтверждение</p>
+        <h2 id="dialog-title">Подтверждение</h2>
+        <p id="dialog-text"></p>
+      </div>
       <div class="dialog-actions">
-        <button class="dialog-button secondary focusable" data-dialog="cancel">Отмена</button>
+        <button class="dialog-button secondary focusable" data-dialog="cancel" data-i18n="cancel">Отмена</button>
         <button class="dialog-button focusable" data-dialog="confirm">Подтвердить</button>
       </div>
+      <small class="dialog-hint">Esc — отмена · Enter — подтвердить</small>
     </section>
   </div>
 

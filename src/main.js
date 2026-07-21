@@ -13,6 +13,7 @@ let updateCheckInProgress = false;
 let downloadedUpdatePath = null;
 let updateInstallInProgress = false;
 let systemAppMode = false;
+let confirmationVisible = false;
 let pendingLauncherAction = process.argv.includes('--poweroff') ? 'poweroff' : null;
 const isDev = process.argv.includes('--dev');
 const isTvSession = process.argv.includes('--tv-session') || process.env.FEDORA_TV_SESSION === '1';
@@ -437,7 +438,7 @@ function sendBrowserState(extra = {}) {
 }
 
 function resizeBrowserView() {
-  if (!mainWindow || !browserView || !browserVisible) return;
+  if (!mainWindow || !browserView || !browserVisible || confirmationVisible) return;
   const [width, height] = mainWindow.getContentSize();
   const keyboardHeight = keyboardVisible ? Math.min(KEYBOARD_HEIGHT, Math.floor(height * KEYBOARD_VIEWPORT_RATIO)) : 0;
   browserView.setBounds({ x: 0, y: BROWSER_TOOLBAR_HEIGHT, width, height: Math.max(1, height - BROWSER_TOOLBAR_HEIGHT - keyboardHeight) });
@@ -506,6 +507,32 @@ function showLauncher() {
   mainWindow?.webContents.focus();
   sendBrowserState({ visible: false });
   mainWindow?.webContents.send('launcher:home');
+}
+
+function setConfirmationVisible(visible) {
+  confirmationVisible = Boolean(visible);
+  if (!mainWindow || mainWindow.isDestroyed()) return confirmationVisible;
+
+  if (confirmationVisible) {
+    if (browserView && mainWindow.contentView.children.includes(browserView)) {
+      mainWindow.contentView.removeChildView(browserView);
+    }
+    mainWindow.setAlwaysOnTop(true, 'screen-saver');
+    mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    mainWindow.show();
+    mainWindow.moveTop();
+    mainWindow.webContents.focus();
+    return true;
+  }
+
+  mainWindow.setAlwaysOnTop(false);
+  mainWindow.setVisibleOnAllWorkspaces(false);
+  if (browserVisible && browserView && !mainWindow.contentView.children.includes(browserView)) {
+    mainWindow.contentView.addChildView(browserView);
+    resizeBrowserView();
+    setTimeout(() => browserView?.webContents.focus(), 0);
+  }
+  return false;
 }
 
 function requestLauncherAction(action) {
@@ -670,18 +697,21 @@ ipcMain.handle('app:open', async (_event, selectedApp) => {
   if (storedApp.type === 'system') {
     const installedApp = installedDesktopApps().find((item) => item.desktopId === storedApp.desktopId);
     if (!installedApp) return { ok: false, message: 'Приложение не найдено в системе' };
-    systemAppMode = true;
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.setKiosk(false);
       mainWindow.setFullScreen(false);
-      mainWindow.hide();
+      mainWindow.show();
+      mainWindow.focus();
     }
     const result = await runSystemCommand('gio', ['launch', installedApp.filePath]);
     if (!result.ok) {
-      systemAppMode = false;
       restoreKioskWindow();
       return result;
     }
+    // Оставляем живую оболочку фоном. Новое окно получает фокус от композитора,
+    // а при ошибке отображения пользователь не остаётся на пустом чёрном экране.
+    systemAppMode = true;
+    mainWindow?.blur();
     return { ...result, external: true };
   }
   if (!/^https:\/\//i.test(storedApp.url || '')) return { ok: false, message: 'Разрешены только HTTPS-адреса' };
@@ -748,6 +778,7 @@ ipcMain.handle('window:toggle-fullscreen', () => {
   mainWindow.setFullScreen(!mainWindow.isFullScreen());
   return mainWindow.isFullScreen();
 });
+ipcMain.handle('window:confirmation-visible', (_event, visible) => setConfirmationVisible(visible));
 ipcMain.handle('system:action', async (_event, action) => {
   if (action === 'logout') {
     if (!isTvSession) return { ok: false, message: 'Выход из TV-сессии доступен после её установки.' };
