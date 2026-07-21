@@ -59,8 +59,8 @@
       </div>
       <div class="status">
         <div class="system-pills" aria-label="Состояние системы">
-          <button class="status-pill focusable" id="topbar-network" type="button" aria-label="Выбрать сеть Wi‑Fi" aria-expanded="false"><i>◌</i><b>Wi‑Fi</b></button>
-          <button class="status-pill focusable" id="topbar-volume" type="button" aria-label="Настроить громкость" aria-expanded="false"><i>♪</i><b>—</b></button>
+          <button class="status-pill focusable" id="topbar-network" type="button" aria-label="Выбрать сеть Wi‑Fi" aria-expanded="false"><i class="wifi-signal level-0" aria-hidden="true">◌</i><b>Wi‑Fi</b></button>
+          <button class="status-pill focusable" id="topbar-volume" type="button" aria-label="Настроить громкость" aria-expanded="false"><i class="volume-symbol" aria-hidden="true">🔊</i><b>—</b></button>
         </div>
         <button class="topbar-button focusable" id="keyboard-toggle" aria-label="Экранная клавиатура" title="Экранная клавиатура">⌨</button>
         <button class="topbar-button focusable" id="settings-shortcut" aria-label="Настройки" title="Настройки">⚙</button>
@@ -70,11 +70,11 @@
 
     <aside class="quick-panel" id="quick-panel" role="dialog" aria-modal="false" aria-labelledby="quick-panel-title" hidden>
       <div class="quick-panel-header">
-        <div><p class="eyebrow">Быстрые настройки</p><h2 id="quick-panel-title">Управление системой</h2></div>
+        <div><p class="eyebrow" id="quick-panel-eyebrow">Звук</p><h2 id="quick-panel-title">Громкость</h2></div>
         <button class="icon-button focusable" id="quick-panel-close" type="button" aria-label="Закрыть">×</button>
       </div>
       <section class="quick-section" id="quick-sound-section" data-nav-zone="quick-sound" data-nav-order="0">
-        <div class="quick-section-heading"><span class="quick-icon" aria-hidden="true">♪</span><div><strong data-i18n="soundTitle">Громкость</strong><span id="quick-volume-value">—</span></div></div>
+        <div class="quick-section-heading"><span class="quick-icon" aria-hidden="true">🔊</span><div><strong data-i18n="soundTitle">Громкость</strong><span id="quick-volume-value">—</span></div></div>
         <div class="quick-volume-control">
           <span aria-hidden="true">−</span>
           <input class="focusable" id="quick-volume-slider" type="range" min="0" max="100" step="5" value="50" aria-label="Громкость">
@@ -82,9 +82,9 @@
         </div>
         <button class="quick-action focusable" id="quick-mute-toggle" type="button" data-i18n="mute">Выключить звук</button>
       </section>
-      <section class="quick-section" id="quick-wifi-section" data-nav-zone="quick-wifi" data-nav-order="1">
+      <section class="quick-section" id="quick-wifi-section" data-nav-zone="quick-wifi" data-nav-order="1" hidden>
         <div class="quick-section-heading">
-          <span class="quick-icon" aria-hidden="true">⌁</span>
+          <span class="quick-icon quick-wifi-symbol" aria-hidden="true"><i class="wifi-signal level-0" id="quick-network-icon"></i></span>
           <div><strong data-i18n="networkTitle">Беспроводная сеть</strong><span id="quick-network-state">Wi‑Fi</span></div>
           <button class="switch focusable" id="quick-wifi-toggle" type="button" role="switch" aria-label="Включить или выключить Wi‑Fi" aria-checked="false"><span></span></button>
         </div>
@@ -101,7 +101,7 @@
     <section class="hero">
       <div class="hero-copy">
         <p class="eyebrow" id="hero-eyebrow">Домашний экран</p>
-        <h1 id="hero-title">Что будем смотреть?</h1>
+        <h1 id="hero-title">Добрый день!</h1>
         <p id="hero-description">Веб-сервисы и приложения Fedora — в одном месте.</p>
       </div>
       <div class="hero-hints" id="hero-hints" aria-label="Подсказки управления">
@@ -265,7 +265,10 @@
   </div>
 
   <section class="onscreen-keyboard" id="onscreen-keyboard" aria-label="Экранная клавиатура" hidden>
-    <div class="keyboard-heading"><strong id="keyboard-language">Русский</strong><button class="keyboard-close focusable" id="keyboard-close" aria-label="Закрыть">×</button></div>
+    <div class="keyboard-heading">
+      <div class="keyboard-status"><strong id="keyboard-language">Русская раскладка</strong><span id="keyboard-mode">Буквы</span></div>
+      <button class="keyboard-close focusable" id="keyboard-close" aria-label="Закрыть">×</button>
+    </div>
     <div class="keyboard-keys" id="keyboard-keys"></div>
   </section>
 

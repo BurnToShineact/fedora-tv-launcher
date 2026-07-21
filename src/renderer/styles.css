@@ -1059,3 +1059,160 @@ body::before { opacity: .16; animation: none; }
   .browser-actions { gap: 4px; }
   .browser-resume { padding-inline: 10px; }
 }
+
+/* v2.5 — glass app shelf, dedicated quick controls and complete TV keyboard */
+.topbar,
+.quick-panel,
+.onscreen-keyboard,
+.panel,
+.dialog {
+  border-color: rgba(231, 240, 255, .22);
+  background: linear-gradient(145deg, rgba(35, 47, 63, .62), rgba(12, 20, 31, .42));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14), 0 24px 64px rgba(0, 0, 0, .24);
+  backdrop-filter: blur(32px) saturate(135%);
+  -webkit-backdrop-filter: blur(32px) saturate(135%);
+}
+
+.system-pills { gap: 7px; }
+.status-pill,
+.topbar-button {
+  border-color: rgba(231, 240, 255, .16);
+  background: linear-gradient(145deg, rgba(255,255,255,.1), rgba(255,255,255,.035));
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+.status-pill i { width: 21px; height: 21px; flex: 0 0 auto; display: grid; place-items: center; }
+.status-pill .volume-symbol { width: 23px; font-size: 16px; }
+
+.wifi-signal {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  color: #b9d6ff;
+}
+.wifi-signal svg { width: 100%; height: 100%; overflow: visible; fill: none; stroke: currentColor; stroke-width: 2.15; stroke-linecap: round; }
+.wifi-signal .wifi-wave { opacity: .18; transition: opacity .18s ease; }
+.wifi-signal .wave-1 { fill: currentColor; stroke: none; }
+.wifi-signal.level-1 .wave-1,
+.wifi-signal.level-2 .wave-1,
+.wifi-signal.level-2 .wave-2,
+.wifi-signal.level-3 .wave-1,
+.wifi-signal.level-3 .wave-2,
+.wifi-signal.level-3 .wave-3,
+.wifi-signal.level-4 .wifi-wave { opacity: 1; }
+.wifi-signal .wifi-off-line { display: none; stroke: #ffabb5; stroke-width: 2.4; }
+.wifi-signal.off .wifi-off-line { display: block; }
+.wifi-signal.off .wifi-wave { opacity: .12; }
+.wifi-network > .wifi-signal { width: 30px; height: 30px; align-self: center; }
+.wifi-network { align-items: center; }
+.quick-wifi-symbol .wifi-signal { width: 26px; height: 26px; color: #102f58; }
+
+.quick-panel { width: min(450px, calc(100vw - 44px)); }
+.quick-section[hidden] { display: none; }
+.quick-section {
+  border-color: rgba(229, 239, 255, .14);
+  background: linear-gradient(145deg, rgba(255,255,255,.085), rgba(255,255,255,.025));
+}
+.quick-panel[data-section="sound"] #quick-sound-section,
+.quick-panel[data-section="wifi"] #quick-wifi-section {
+  border-color: rgba(170, 207, 255, .28);
+  background: linear-gradient(145deg, rgba(118, 164, 225, .13), rgba(255,255,255,.025));
+}
+
+.app-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; }
+.app-card {
+  min-height: 148px;
+  padding: 18px 14px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  overflow: visible;
+  border: 1px solid rgba(231, 240, 255, .2);
+  border-radius: 24px;
+  text-align: center;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 8%, rgba(255,255,255,.105)), rgba(255,255,255,.025));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 14px 38px rgba(0,0,0,.14);
+  backdrop-filter: blur(28px) saturate(125%);
+  -webkit-backdrop-filter: blur(28px) saturate(125%);
+}
+.app-card::before { display: none; }
+.app-card::after { border-radius: inherit; }
+.app-card .icon {
+  width: 72px;
+  height: 72px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 21px;
+  background: color-mix(in srgb, var(--accent) 34%, rgba(255,255,255,.18));
+  box-shadow: 0 12px 26px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.2);
+  font-size: 21px;
+}
+.app-card .icon.has-image { border: 0; background: transparent; box-shadow: 0 12px 26px rgba(0,0,0,.2); }
+.app-card .icon img { width: 100%; height: 100%; display: block; object-fit: contain; }
+.app-card .title {
+  width: 100%;
+  min-height: 21px;
+  overflow: hidden;
+  color: #f7fbff;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  text-shadow: none;
+  white-space: nowrap;
+}
+.app-card:hover,
+.app-card:focus,
+.app-card.focused {
+  transform: translateY(-5px) scale(1.025);
+  border-color: rgba(244, 248, 255, .62);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 13%, rgba(255,255,255,.16)), rgba(255,255,255,.05));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 22px 52px rgba(0,0,0,.25);
+}
+.add-card { border-style: dashed; background: linear-gradient(145deg, rgba(255,255,255,.075), rgba(255,255,255,.018)); }
+.add-card .icon { background: rgba(255,255,255,.07); box-shadow: none; }
+
+.onscreen-keyboard {
+  padding: 9px clamp(18px, 4vw, 72px) 13px;
+  background: linear-gradient(155deg, rgba(35, 45, 59, .82), rgba(12, 18, 27, .72));
+}
+.keyboard-heading { min-height: 35px; }
+.keyboard-status { display: flex; align-items: baseline; gap: 10px; }
+.keyboard-status strong { color: #edf5ff; font-size: 14px; }
+.keyboard-status span { color: #9fb1c6; font-size: 12px; }
+.keyboard-keys { gap: 6px; }
+.keyboard-row { gap: 6px; }
+.keyboard-key {
+  border-color: rgba(231, 240, 255, .15);
+  background: linear-gradient(145deg, rgba(255,255,255,.13), rgba(255,255,255,.055));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 5px 14px rgba(0,0,0,.12);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: transform .14s ease, background .14s ease, border-color .14s ease;
+}
+.keyboard-key:hover,
+.keyboard-key:focus,
+.keyboard-key.focused { border-color: rgba(235, 244, 255, .48); background: rgba(111, 151, 205, .34); transform: translateY(-1px); }
+.keyboard-key.modifier { flex-grow: 1.35; color: #d9e8fb; background: rgba(109, 139, 181, .2); }
+.keyboard-key.modifier.active { background: #a9caff; color: #0b315e; font-weight: 800; }
+.keyboard-controls .keyboard-key.language { flex-grow: 1.55; }
+.keyboard-controls .keyboard-key.space { flex: 4.6 1 0; }
+.keyboard-controls .keyboard-key.compact { flex: .7 1 0; }
+.keyboard-close { border: 1px solid rgba(231,240,255,.13); background: rgba(255,255,255,.07); }
+
+@media (max-width: 1250px) {
+  .app-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+@media (max-width: 980px) {
+  .app-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .app-card { min-height: 138px; }
+}
+@media (max-width: 700px) {
+  .app-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .app-card .icon { width: 62px; height: 62px; }
+  .keyboard-controls .keyboard-key.language { flex-grow: 1.2; }
+}

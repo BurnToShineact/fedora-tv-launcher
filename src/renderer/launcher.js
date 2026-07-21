@@ -61,10 +61,15 @@ const topbarNetwork = document.getElementById('topbar-network');
 const topbarVolume = document.getElementById('topbar-volume');
 const quickPanel = document.getElementById('quick-panel');
 const quickPanelClose = document.getElementById('quick-panel-close');
+const quickPanelEyebrow = document.getElementById('quick-panel-eyebrow');
+const quickPanelTitle = document.getElementById('quick-panel-title');
+const quickSoundSection = document.getElementById('quick-sound-section');
+const quickWifiSection = document.getElementById('quick-wifi-section');
 const quickVolumeSlider = document.getElementById('quick-volume-slider');
 const quickVolumeValue = document.getElementById('quick-volume-value');
 const quickMuteToggle = document.getElementById('quick-mute-toggle');
 const quickNetworkState = document.getElementById('quick-network-state');
+const quickNetworkIcon = document.getElementById('quick-network-icon');
 const quickWifiToggle = document.getElementById('quick-wifi-toggle');
 const quickWifiScan = document.getElementById('quick-wifi-scan');
 const quickWifiList = document.getElementById('quick-wifi-list');
@@ -77,6 +82,7 @@ const onscreenKeyboard = document.getElementById('onscreen-keyboard');
 const keyboardKeys = document.getElementById('keyboard-keys');
 const keyboardClose = document.getElementById('keyboard-close');
 const keyboardLanguage = document.getElementById('keyboard-language');
+const keyboardMode = document.getElementById('keyboard-mode');
 const volumeSlider = document.getElementById('volume-slider');
 const volumeValue = document.getElementById('volume-value');
 const muteToggle = document.getElementById('mute-toggle');
@@ -98,6 +104,9 @@ let dismissedUpdateKey = '';
 let browserOpen = false;
 let keyboardOpen = false;
 let currentLanguage = 'ru';
+let keyboardLayoutLanguage = null;
+let keyboardSymbolMode = false;
+let keyboardShifted = false;
 let selectedNetwork = null;
 let quickSelectedNetwork = null;
 let lastTextInput = null;
@@ -119,19 +128,20 @@ function t(key) { return translations[currentLanguage]?.[key] || translations.ru
 
 function applyLanguage(language) {
   currentLanguage = language === 'en' ? 'en' : 'ru';
+  if (!keyboardLayoutLanguage) keyboardLayoutLanguage = currentLanguage;
   document.documentElement.lang = currentLanguage;
   document.querySelectorAll('[data-i18n]').forEach((element) => { element.textContent = t(element.dataset.i18n); });
   document.querySelectorAll('[data-language]').forEach((button) => button.classList.toggle('selected', button.dataset.language === currentLanguage));
   const english = currentLanguage === 'en';
   document.getElementById('hero-eyebrow').textContent = english ? 'Home screen' : 'Домашний экран';
-  document.getElementById('hero-title').textContent = english ? 'What shall we watch?' : 'Что будем смотреть?';
+  updateGreeting();
   document.getElementById('hero-description').textContent = english ? 'Web services and Fedora apps — together in one place.' : 'Веб-сервисы и приложения Fedora — в одном месте.';
   document.getElementById('hero-hints').innerHTML = english
     ? '<span><kbd>← ↑ ↓ →</kbd><b>Navigate</b></span><span><kbd>OK</kbd><b>Open</b></span><span><kbd>Home</kbd><b>Home</b></span>'
     : '<span><kbd>← ↑ ↓ →</kbd><b>Выбор</b></span><span><kbd>OK</kbd><b>Открыть</b></span><span><kbd>Home</kbd><b>Домой</b></span>';
   document.querySelector('.section-title h2').textContent = t('apps');
   document.getElementById('manage-title').textContent = t('settings');
-  keyboardLanguage.textContent = english ? 'English' : 'Русский';
+  if (!quickPanel.hidden) updateQuickPanelHeading(quickPanel.dataset.section);
   renderKeyboard();
   if (latestAudioState) renderAudio(latestAudioState);
   if (latestWifiState) renderWifi(latestWifiState);
@@ -258,6 +268,16 @@ function updateClock() {
   const locale = currentLanguage === 'en' ? 'en-US' : 'ru-RU';
   clock.textContent = new Intl.DateTimeFormat(locale, { hour:'2-digit', minute:'2-digit' }).format(now);
   dateLabel.textContent = new Intl.DateTimeFormat(locale, { weekday:'short', day:'numeric', month:'long' }).format(now);
+  updateGreeting(now);
+}
+
+function updateGreeting(now = new Date()) {
+  const hour = now.getHours();
+  const period = hour >= 5 && hour < 12 ? 'morning' : hour >= 12 && hour < 18 ? 'day' : 'evening';
+  const greetings = currentLanguage === 'en'
+    ? { morning: 'Good morning!', day: 'Good afternoon!', evening: 'Good evening!' }
+    : { morning: 'Доброе утро!', day: 'Добрый день!', evening: 'Добрый вечер!' };
+  document.getElementById('hero-title').textContent = greetings[period];
 }
 
 function showToast(message) {
@@ -503,9 +523,20 @@ function closeManagePanel() {
   refreshFocusables(overlayReturnFocus.get(manageBackdrop) || 0);
 }
 
+function updateQuickPanelHeading(section = 'sound') {
+  const sound = section === 'sound';
+  quickPanelEyebrow.textContent = sound
+    ? (currentLanguage === 'en' ? 'Sound' : 'Звук')
+    : 'Wi‑Fi';
+  quickPanelTitle.textContent = sound ? t('soundTitle') : t('networkTitle');
+}
+
 function openQuickPanel(section = 'sound') {
   overlayReturnFocus.set(quickPanel, document.activeElement);
   quickPanel.dataset.section = section;
+  quickSoundSection.hidden = section !== 'sound';
+  quickWifiSection.hidden = section !== 'wifi';
+  updateQuickPanelHeading(section);
   quickPanel.hidden = false;
   document.body.classList.add('quick-panel-open');
   topbarVolume.setAttribute('aria-expanded', String(section === 'sound'));
@@ -535,9 +566,40 @@ function renderAudio(state = {}) {
   muteToggle.classList.toggle('active', Boolean(state.muted));
   quickMuteToggle.textContent = state.muted ? t('unmute') : t('mute');
   quickMuteToggle.classList.toggle('active', Boolean(state.muted));
-  topbarVolume.querySelector('i').textContent = state.muted ? '×' : '♪';
+  topbarVolume.querySelector('i').textContent = state.muted ? '🔇' : state.volume < 35 ? '🔈' : state.volume < 70 ? '🔉' : '🔊';
   topbarVolume.querySelector('b').textContent = state.muted ? (currentLanguage === 'en' ? 'Muted' : 'Без звука') : `${state.volume}%`;
   topbarVolume.classList.toggle('inactive', Boolean(state.muted));
+}
+
+function wifiSignalLevel(signal) {
+  const value = Math.max(0, Math.min(100, Number(signal) || 0));
+  if (value === 0) return 0;
+  if (value < 30) return 1;
+  if (value < 55) return 2;
+  if (value < 80) return 3;
+  return 4;
+}
+
+function wifiSignalLabel(signal, enabled = true) {
+  if (!enabled) return currentLanguage === 'en' ? 'Wi-Fi is off' : 'Wi‑Fi выключен';
+  const labels = currentLanguage === 'en'
+    ? ['No connection', 'Weak signal', 'Fair signal', 'Good signal', 'Excellent signal']
+    : ['Нет подключения', 'Слабый сигнал', 'Средний сигнал', 'Хороший сигнал', 'Отличный сигнал'];
+  return labels[wifiSignalLevel(signal)];
+}
+
+function wifiSignalMarkup() {
+  return '<svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path class="wifi-wave wave-4" d="M2.7 8.7a14.8 14.8 0 0 1 18.6 0"/><path class="wifi-wave wave-3" d="M6.2 12.3a9.3 9.3 0 0 1 11.6 0"/><path class="wifi-wave wave-2" d="M9.3 15.7a4.4 4.4 0 0 1 5.4 0"/><circle class="wifi-wave wave-1" cx="12" cy="19" r="1.45"/><path class="wifi-off-line" d="M4 4l16 16"/></svg>';
+}
+
+function renderWifiSignal(element, signal, enabled = true) {
+  const level = enabled ? wifiSignalLevel(signal) : 0;
+  element.className = `wifi-signal level-${level}${enabled ? '' : ' off'}`;
+  element.innerHTML = wifiSignalMarkup();
+  if (!element.hasAttribute('aria-hidden')) {
+    element.setAttribute('role', 'img');
+    element.setAttribute('aria-label', wifiSignalLabel(signal, enabled));
+  }
 }
 
 function renderWifi(state = {}) {
@@ -545,7 +607,8 @@ function renderWifi(state = {}) {
   wifiToggle.setAttribute('aria-checked', String(Boolean(state.enabled)));
   quickWifiToggle.setAttribute('aria-checked', String(Boolean(state.enabled)));
   const activeNetwork = state.networks?.find((network) => network.active);
-  topbarNetwork.querySelector('i').textContent = state.enabled ? '⌁' : '×';
+  renderWifiSignal(topbarNetwork.querySelector('i'), activeNetwork?.signal, Boolean(state.enabled));
+  renderWifiSignal(quickNetworkIcon, activeNetwork?.signal, Boolean(state.enabled));
   topbarNetwork.querySelector('b').textContent = activeNetwork?.ssid || (state.enabled ? 'Wi‑Fi' : (currentLanguage === 'en' ? 'Off' : 'Выкл.'));
   topbarNetwork.classList.toggle('inactive', !state.enabled);
   quickNetworkState.textContent = activeNetwork?.ssid || (state.enabled ? (currentLanguage === 'en' ? 'Select a network' : 'Выберите сеть') : t('wifiOff'));
@@ -566,10 +629,10 @@ function renderWifiNetworks(container, state, source) {
   for (const network of state.networks.slice(0, 12)) {
     const button = document.createElement('button');
     button.className = `wifi-network focusable${network.active ? ' active' : ''}`;
-    button.innerHTML = '<span><strong></strong><span class="wifi-detail"></span></span><b></b>';
+    button.innerHTML = '<span><strong></strong><span class="wifi-detail"></span></span><span class="wifi-signal"></span>';
     button.querySelector('strong').textContent = network.ssid;
     button.querySelector('.wifi-detail').textContent = network.active ? t('connected') : (network.secure ? t('secured') : t('open'));
-    button.querySelector('b').textContent = `${network.signal}%`;
+    renderWifiSignal(button.querySelector('.wifi-signal'), network.signal);
     button.addEventListener('click', () => selectNetwork(network, source));
     container.appendChild(button);
   }
@@ -610,36 +673,111 @@ async function loadSystemSettings() {
   renderWifi(result.wifi);
 }
 
-function renderKeyboard() {
+function renderKeyboard(preferredAction = null) {
   if (!keyboardKeys) return;
-  const rows = currentLanguage === 'en'
-    ? [['1','2','3','4','5','6','7','8','9','0','-','='], ['q','w','e','r','t','y','u','i','o','p','[',']'], ['a','s','d','f','g','h','j','k','l',';','\'','Backspace'], ['z','x','c','v','b','n','m',',','.','/','Enter']]
-    : [['1','2','3','4','5','6','7','8','9','0','-','='], ['й','ц','у','к','е','н','г','ш','щ','з','х','ъ'], ['ф','ы','в','а','п','р','о','л','д','ж','э','Backspace'], ['я','ч','с','м','и','т','ь','б','ю','.','Enter']];
+  keyboardLayoutLanguage ||= currentLanguage;
+  const letterRows = {
+    en: [
+      ['1','2','3','4','5','6','7','8','9','0','-','='],
+      ['q','w','e','r','t','y','u','i','o','p','[',']'],
+      ['a','s','d','f','g','h','j','k','l',';','\'','Backspace'],
+      ['Shift','z','x','c','v','b','n','m',',','.','/','Enter']
+    ],
+    ru: [
+      ['1','2','3','4','5','6','7','8','9','0','-','='],
+      ['й','ц','у','к','е','н','г','ш','щ','з','х','ъ'],
+      ['ф','ы','в','а','п','р','о','л','д','ж','э','Backspace'],
+      ['Shift','я','ч','с','м','и','т','ь','б','ю','.','Enter']
+    ]
+  };
+  const symbolRows = [
+    ['1','2','3','4','5','6','7','8','9','0','-','='],
+    ['@','#','₽','$','€','&','+','(',')','/','\\','_'],
+    ['*','"','\'',':',';','!','?','%','^','`','~','Backspace'],
+    ['{','}','[',']','<','>','|','_','=', '+','/','Enter']
+  ];
+  const rows = keyboardSymbolMode ? symbolRows : letterRows[keyboardLayoutLanguage];
+  keyboardLanguage.textContent = keyboardLayoutLanguage === 'en'
+    ? (currentLanguage === 'en' ? 'English layout' : 'Английская раскладка')
+    : (currentLanguage === 'en' ? 'Russian layout' : 'Русская раскладка');
+  keyboardMode.textContent = keyboardSymbolMode
+    ? (currentLanguage === 'en' ? 'Symbols' : 'Символы')
+    : (currentLanguage === 'en' ? 'Letters' : 'Буквы');
   keyboardKeys.innerHTML = '';
+
   for (const keys of rows) {
     const row = document.createElement('div');
     row.className = 'keyboard-row';
     for (const key of keys) {
       const button = document.createElement('button');
+      const isLetter = key.length === 1 && key.toLocaleLowerCase() !== key.toLocaleUpperCase();
+      const output = keyboardShifted && isLetter ? key.toLocaleUpperCase(keyboardLayoutLanguage === 'ru' ? 'ru-RU' : 'en-US') : key;
       button.type = 'button';
-      button.className = `keyboard-key focusable${['Backspace','Enter'].includes(key) ? ' wide' : ''}`;
-      button.dataset.key = key;
-      button.textContent = key === 'Backspace' ? '⌫' : key === 'Enter' ? '↵' : key;
-      button.addEventListener('click', () => typeKeyboardKey(key));
+      button.className = `keyboard-key focusable${['Backspace','Enter','Shift'].includes(key) ? ' wide modifier' : ''}${key === 'Shift' && keyboardShifted ? ' active' : ''}`;
+      button.dataset.key = output;
+      if (key === 'Shift') button.dataset.action = 'shift';
+      button.textContent = key === 'Backspace' ? '⌫' : key === 'Enter' ? '↵' : key === 'Shift' ? '⇧' : output;
+      if (key === 'Shift') {
+        button.setAttribute('aria-label', currentLanguage === 'en' ? 'Uppercase' : 'Заглавные буквы');
+        button.setAttribute('aria-pressed', String(keyboardShifted));
+        button.addEventListener('click', () => handleKeyboardControl('shift'));
+      } else {
+        button.addEventListener('click', () => typeKeyboardKey(output));
+      }
       row.appendChild(button);
     }
     keyboardKeys.appendChild(row);
   }
-  const spaceRow = document.createElement('div');
-  spaceRow.className = 'keyboard-row keyboard-space-row';
-  const space = document.createElement('button');
-  space.type = 'button';
-  space.className = 'keyboard-key space focusable';
-  space.dataset.key = ' ';
-  space.textContent = currentLanguage === 'en' ? 'Space' : 'Пробел';
-  space.addEventListener('click', () => typeKeyboardKey(' '));
-  spaceRow.appendChild(space);
-  keyboardKeys.appendChild(spaceRow);
+
+  const controls = document.createElement('div');
+  controls.className = 'keyboard-row keyboard-controls';
+  const addControl = (label, action, className, handler, ariaLabel = '') => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `keyboard-key focusable ${className}`;
+    button.dataset.action = action;
+    button.textContent = label;
+    if (ariaLabel) button.setAttribute('aria-label', ariaLabel);
+    button.addEventListener('click', handler);
+    controls.appendChild(button);
+  };
+  addControl(
+    keyboardSymbolMode ? (keyboardLayoutLanguage === 'ru' ? 'АБВ' : 'ABC') : '?123',
+    'symbols',
+    `modifier${keyboardSymbolMode ? ' active' : ''}`,
+    () => handleKeyboardControl('symbols'),
+    keyboardSymbolMode
+      ? (currentLanguage === 'en' ? 'Show letters' : 'Показать буквы')
+      : (currentLanguage === 'en' ? 'Show numbers and symbols' : 'Показать цифры и символы')
+  );
+  addControl(
+    'RU / EN',
+    'language',
+    'modifier language',
+    () => handleKeyboardControl('language'),
+    currentLanguage === 'en' ? 'Switch keyboard language' : 'Переключить язык клавиатуры'
+  );
+  addControl(currentLanguage === 'en' ? 'Space' : 'Пробел', 'space', 'space', () => typeKeyboardKey(' '));
+  addControl(',', 'comma', 'compact', () => typeKeyboardKey(','));
+  addControl('.', 'period', 'compact', () => typeKeyboardKey('.'));
+  keyboardKeys.appendChild(controls);
+
+  if (preferredAction && keyboardOpen) {
+    requestAnimationFrame(() => refreshFocusables(keyboardKeys.querySelector(`[data-action="${preferredAction}"]`) || 0));
+  }
+}
+
+function handleKeyboardControl(action) {
+  if (action === 'language') {
+    keyboardLayoutLanguage = keyboardLayoutLanguage === 'ru' ? 'en' : 'ru';
+    keyboardShifted = false;
+  } else if (action === 'symbols') {
+    keyboardSymbolMode = !keyboardSymbolMode;
+    keyboardShifted = false;
+  } else if (action === 'shift') {
+    keyboardShifted = !keyboardShifted;
+  }
+  renderKeyboard(action);
 }
 
 function typeKeyboardKey(key) {
@@ -734,11 +872,10 @@ async function renderApps() {
     button.style.setProperty('--card-index', grid.children.length);
     button.style.setProperty('--accent', app.accent || '#334155');
     button.dataset.app = JSON.stringify(app);
-    button.innerHTML = '<span class="icon"></span><span class="card-copy"><span class="title"></span><span class="kind"></span></span>';
+    button.innerHTML = '<span class="icon"></span><span class="title"></span>';
     renderAppIcon(button.querySelector('.icon'), app);
     const builtInEnglishTitles = { vkvideo: 'VK Video', browser: 'Browser', settings: 'Settings' };
     button.querySelector('.title').textContent = currentLanguage === 'en' ? (app.titleEn || builtInEnglishTitles[app.id] || app.title) : app.title;
-    button.querySelector('.kind').textContent = app.type === 'system' ? t('systemApp') : app.action === 'settings' ? t('settingsKind') : t('webApp');
     button.addEventListener('click', () => activate(button));
     makeCardInteractive(button);
     grid.appendChild(button);
@@ -747,7 +884,7 @@ async function renderApps() {
   addButton.className = 'app-card add-card focusable';
   addButton.style.setProperty('--card-index', grid.children.length);
   addButton.dataset.special = 'add';
-  addButton.innerHTML = `<span class="icon">＋</span><span class="card-copy"><span class="title">${t('addApp')}</span><span class="kind">${t('addKind')}</span></span>`;
+  addButton.innerHTML = `<span class="icon">＋</span><span class="title">${t('addApp')}</span>`;
   addButton.addEventListener('click', () => activate(addButton));
   makeCardInteractive(addButton);
   grid.appendChild(addButton);
@@ -933,6 +1070,9 @@ async function loadApps() {
   quickWifiPasswordCancel.addEventListener('click', () => { quickWifiPasswordForm.hidden = true; setKeyboardVisible(false); });
   document.querySelectorAll('[data-language]').forEach((button) => button.addEventListener('click', async () => {
     await window.tv.setLanguage(button.dataset.language);
+    keyboardLayoutLanguage = button.dataset.language;
+    keyboardSymbolMode = false;
+    keyboardShifted = false;
     applyLanguage(button.dataset.language);
     await renderApps();
     refreshFocusables(button);
@@ -953,11 +1093,15 @@ function renderAppIcon(container, app, fallback = null) {
   const iconFile = app.iconPath || builtInIcons[app.id];
   const source = app.iconDataUrl || (/^[a-z0-9_-]+\.svg$/i.test(iconFile || '') ? `../../assets/app-icons/${iconFile}` : null);
   container.replaceChildren();
+  container.classList.toggle('has-image', Boolean(source));
   if (source) {
     const image = document.createElement('img');
     image.src = source;
     image.alt = '';
-    image.addEventListener('error', () => { container.textContent = fallback || app.icon || app.title.slice(0, 2).toUpperCase(); }, { once: true });
+    image.addEventListener('error', () => {
+      container.classList.remove('has-image');
+      container.textContent = fallback || app.icon || app.title.slice(0, 2).toUpperCase();
+    }, { once: true });
     container.appendChild(image);
   } else {
     container.textContent = fallback || app.icon || app.title.slice(0, 2).toUpperCase();
