@@ -4,5 +4,6 @@
   {"id":"rutube","title":"Rutube","url":"https://rutube.ru","icon":"RT","iconPath":"rutube.svg","accent":"#111827"},
   {"id":"twitch","title":"Twitch","url":"https://www.twitch.tv","icon":"TW","iconPath":"twitch.svg","accent":"#9146ff"},
   {"id":"browser","title":"Браузер","titleEn":"Browser","url":"https://www.google.com","icon":"WEB","iconPath":"google.svg","accent":"#0f766e"},
+  {"id":"files","title":"Проводник","titleEn":"Files","action":"files","icon":"▰","iconPath":"files.svg","accent":"#3b82c4"},
   {"id":"settings","title":"Настройки","titleEn":"Settings","action":"settings","icon":"⚙","iconPath":"fedora.svg","accent":"#475569"}
 ]

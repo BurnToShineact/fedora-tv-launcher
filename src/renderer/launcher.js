@@ -37,6 +37,12 @@ const dialogConfirm = document.querySelector('[data-dialog="confirm"]');
 const dialogCancel = document.querySelector('[data-dialog="cancel"]');
 const addBackdrop = document.getElementById('add-app-backdrop');
 const manageBackdrop = document.getElementById('manage-backdrop');
+const filesBackdrop = document.getElementById('files-backdrop');
+const filesClose = document.getElementById('files-close');
+const filesUp = document.getElementById('files-up');
+const filesRefresh = document.getElementById('files-refresh');
+const filesPath = document.getElementById('files-path');
+const filesList = document.getElementById('files-list');
 const addForm = document.getElementById('add-app-form');
 const titleInput = document.getElementById('app-title');
 const urlInput = document.getElementById('app-url');
@@ -58,6 +64,7 @@ const backgroundClearButton = document.getElementById('background-clear');
 const keyboardToggle = document.getElementById('keyboard-toggle');
 const settingsShortcut = document.getElementById('settings-shortcut');
 const topbarNetwork = document.getElementById('topbar-network');
+const topbarBluetooth = document.getElementById('topbar-bluetooth');
 const topbarVolume = document.getElementById('topbar-volume');
 const quickPanel = document.getElementById('quick-panel');
 const quickPanelClose = document.getElementById('quick-panel-close');
@@ -65,6 +72,7 @@ const quickPanelEyebrow = document.getElementById('quick-panel-eyebrow');
 const quickPanelTitle = document.getElementById('quick-panel-title');
 const quickSoundSection = document.getElementById('quick-sound-section');
 const quickWifiSection = document.getElementById('quick-wifi-section');
+const quickBluetoothSection = document.getElementById('quick-bluetooth-section');
 const quickVolumeSlider = document.getElementById('quick-volume-slider');
 const quickVolumeValue = document.getElementById('quick-volume-value');
 const quickMuteToggle = document.getElementById('quick-mute-toggle');
@@ -77,6 +85,10 @@ const quickWifiPasswordForm = document.getElementById('quick-wifi-password-form'
 const quickWifiPassword = document.getElementById('quick-wifi-password');
 const quickWifiPasswordLabel = document.getElementById('quick-wifi-password-label');
 const quickWifiPasswordCancel = document.getElementById('quick-wifi-password-cancel');
+const quickBluetoothState = document.getElementById('quick-bluetooth-state');
+const quickBluetoothToggle = document.getElementById('quick-bluetooth-toggle');
+const quickBluetoothScan = document.getElementById('quick-bluetooth-scan');
+const quickBluetoothList = document.getElementById('quick-bluetooth-list');
 const settingsKeyboardToggle = document.getElementById('settings-keyboard-toggle');
 const onscreenKeyboard = document.getElementById('onscreen-keyboard');
 const keyboardKeys = document.getElementById('keyboard-keys');
@@ -113,6 +125,13 @@ const wifiPasswordForm = document.getElementById('wifi-password-form');
 const wifiPassword = document.getElementById('wifi-password');
 const wifiPasswordLabel = document.getElementById('wifi-password-label');
 const wifiPasswordCancel = document.getElementById('wifi-password-cancel');
+const bluetoothToggle = document.getElementById('bluetooth-toggle');
+const bluetoothScan = document.getElementById('bluetooth-scan');
+const bluetoothList = document.getElementById('bluetooth-list');
+const settingsCategories = document.getElementById('settings-categories');
+const settingsPageHeader = document.getElementById('settings-page-header');
+const settingsPageDescription = document.getElementById('settings-page-description');
+const settingsBack = document.getElementById('settings-back');
 let focusables = [];
 let focusIndex = 0;
 let toastTimer;
@@ -132,16 +151,19 @@ let quickSelectedNetwork = null;
 let lastTextInput = null;
 let latestAudioState = null;
 let latestWifiState = null;
+let latestBluetoothState = null;
 let latestDisplayState = null;
+let activeSettingsCategory = null;
+let currentFilesState = { path: null, parentPath: null, entries: [] };
 const rememberedFocus = new WeakMap();
 const overlayReturnFocus = new WeakMap();
 
 const translations = {
   ru: {
-    soundGroup: 'Звук', soundTitle: 'Громкость', mute: 'Выключить звук', unmute: 'Включить звук', networkTitle: 'Беспроводная сеть', scan: 'Обновить список', connect: 'Подключиться', cancel: 'Отмена', languageGroup: 'Язык', languageTitle: 'Язык интерфейса', inputGroup: 'Ввод', keyboardTitle: 'Экранная клавиатура', keyboardDescription: 'Открывается автоматически в полях ввода. Её также можно включить кнопкой ⌨ в верхней панели.', openKeyboard: 'Открыть клавиатуру', noNetworks: 'Сети Wi‑Fi не найдены.', wifiOff: 'Wi‑Fi выключен', connected: 'Подключено', secured: 'Защищённая сеть', savedNetwork: 'Сохранённая сеть', open: 'Открытая сеть', signal: 'Сигнал', password: 'Пароль для', apps: 'Приложения', settings: 'Настройки', webApp: 'Веб-приложение', systemApp: 'Системное · Home для возврата', settingsKind: 'Настройки оболочки', addApp: 'Добавить приложение', addKind: 'Сайт или приложение из системы', brandSubtitle: 'Отдельная TV-сессия', logout: 'Сменить пользователя', reboot: 'Перезагрузка', poweroff: 'Выключение', newTile: 'Новая плитка', website: 'Веб-сайт', fromSystem: 'Из системы', systemGroup: 'Система', updateTitle: 'Обновление Fedora TV OS', checkUpdates: 'Проверить обновления', appearanceGroup: 'Оформление', backgroundTitle: 'Фоновое изображение', chooseImage: 'Выбрать изображение', resetBackground: 'Сбросить фон', myApps: 'Мои приложения', done: 'Готово', displayGroup: 'Изображение', displayTitle: 'Дисплеи', displayDescription: 'Выберите экран и настройте его видеорежим. Изменения сохраняются для следующих запусков TV-сессии.', displayOutput: 'Дисплей', displayMode: 'Разрешение и частота', displayScale: 'Масштаб', displayRotation: 'Поворот', displayPositionX: 'Позиция X', displayPositionY: 'Позиция Y', displayEnabled: 'Использовать дисплей', displayEnabledHint: 'Единственный активный экран отключить нельзя.', adaptiveSync: 'Адаптивная частота', adaptiveSyncHint: 'Использовать VRR, если дисплей и видеодрайвер поддерживают его.', rotationNormal: 'Обычный', apply: 'Применить', refreshDevices: 'Обновить устройства', audioOutput: 'Устройство вывода', powerGroup: 'Питание', powerTitle: 'Сон, крышка и кнопки', powerDescription: 'Таймер сна действует в TV-сессии. Крышка и физическая кнопка питания настраиваются для всего устройства после системного подтверждения.', sleepAfter: 'Переходить в сон', never: 'Никогда', powerButton: 'Кнопка питания', askBeforePoweroff: 'Показать подтверждение', poweroffNow: 'Выключить', sleep: 'Сон', doNothing: 'Ничего не делать', lidBattery: 'Закрытие крышки', lidExternalPower: 'Крышка при питании от сети', lidDocked: 'Крышка с внешним дисплеем', applyPower: 'Сохранить настройки питания'
+    soundGroup: 'Звук', soundTitle: 'Громкость', mute: 'Выключить звук', unmute: 'Включить звук', networkTitle: 'Беспроводная сеть', scan: 'Обновить список', connect: 'Подключиться', cancel: 'Отмена', languageGroup: 'Язык', languageTitle: 'Язык интерфейса', inputGroup: 'Ввод', keyboardTitle: 'Экранная клавиатура', keyboardDescription: 'Открывается автоматически в полях ввода. Её также можно включить кнопкой ⌨ в верхней панели.', openKeyboard: 'Открыть клавиатуру', noNetworks: 'Сети Wi‑Fi не найдены.', wifiOff: 'Wi‑Fi выключен', connected: 'Подключено', secured: 'Защищённая сеть', savedNetwork: 'Сохранённая сеть', open: 'Открытая сеть', signal: 'Сигнал', password: 'Пароль для', apps: 'Приложения', settings: 'Настройки', webApp: 'Веб-приложение', systemApp: 'Системное · Home для возврата', settingsKind: 'Настройки оболочки', addApp: 'Добавить приложение', addKind: 'Сайт или приложение из системы', brandSubtitle: 'Отдельная TV-сессия', logout: 'Сменить пользователя', reboot: 'Перезагрузка', poweroff: 'Выключение', newTile: 'Новая плитка', website: 'Веб-сайт', fromSystem: 'Из системы', systemGroup: 'Система', updateTitle: 'Обновление Fedora TV OS', checkUpdates: 'Проверить обновления', appearanceGroup: 'Оформление', backgroundTitle: 'Фоновое изображение', chooseImage: 'Выбрать изображение', resetBackground: 'Сбросить фон', myApps: 'Мои приложения', done: 'Готово', displayGroup: 'Изображение', displayTitle: 'Дисплеи', displayDescription: 'Выберите экран и настройте его видеорежим. Изменения сохраняются для следующих запусков TV-сессии.', displayOutput: 'Дисплей', displayMode: 'Разрешение и частота', displayScale: 'Масштаб', displayRotation: 'Поворот', displayPositionX: 'Позиция X', displayPositionY: 'Позиция Y', displayEnabled: 'Использовать дисплей', displayEnabledHint: 'Единственный активный экран отключить нельзя.', adaptiveSync: 'Адаптивная частота', adaptiveSyncHint: 'Использовать VRR, если дисплей и видеодрайвер поддерживают его.', rotationNormal: 'Обычный', apply: 'Применить', refreshDevices: 'Обновить устройства', audioOutput: 'Устройство вывода', powerGroup: 'Питание', powerTitle: 'Сон, крышка и кнопки', powerDescription: 'Таймер сна действует в TV-сессии. Крышка и физическая кнопка питания настраиваются для всего устройства после системного подтверждения.', sleepAfter: 'Переходить в сон', never: 'Никогда', powerButton: 'Кнопка питания', askBeforePoweroff: 'Показать подтверждение', poweroffNow: 'Выключить', sleep: 'Сон', doNothing: 'Ничего не делать', lidBattery: 'Закрытие крышки', lidExternalPower: 'Крышка при питании от сети', lidDocked: 'Крышка с внешним дисплеем', applyPower: 'Сохранить настройки питания', bluetoothTitle: 'Bluetooth', bluetoothDescription: 'Подключайте наушники, колонки, пульты и другие устройства.', findDevices: 'Найти устройства', bluetoothOff: 'Bluetooth выключен', noBluetoothDevices: 'Устройства Bluetooth не найдены.', paired: 'Сопряжено', connecting: 'Подключаем…', disconnect: 'Отключить', categorySystem: 'Система', categorySystemHint: 'Обновления и питание', categoryPicture: 'Изображение и звук', categoryPictureHint: 'Экран, масштаб и громкость', categoryConnections: 'Подключения', categoryConnectionsHint: 'Wi‑Fi и Bluetooth', categoryAppearance: 'Оформление', categoryAppearanceHint: 'Фоновое изображение', categoryInput: 'Язык и ввод', categoryInputHint: 'Язык и экранная клавиатура', categoryApps: 'Приложения', categoryAppsHint: 'Добавленные плитки', allSettings: 'Все настройки', filesEyebrow: 'Проводник', filesTitle: 'Файлы', location: 'Расположение', filesHint: 'Выберите папку для перехода или файл, чтобы открыть его в подходящем приложении.'
   },
   en: {
-    soundGroup: 'Sound', soundTitle: 'Volume', mute: 'Mute', unmute: 'Unmute', networkTitle: 'Wireless network', scan: 'Refresh list', connect: 'Connect', cancel: 'Cancel', languageGroup: 'Language', languageTitle: 'Interface language', inputGroup: 'Input', keyboardTitle: 'On-screen keyboard', keyboardDescription: 'Opens automatically for text fields. You can also use the ⌨ button in the top bar.', openKeyboard: 'Open keyboard', noNetworks: 'No Wi-Fi networks found.', wifiOff: 'Wi-Fi is off', connected: 'Connected', secured: 'Secured network', savedNetwork: 'Saved network', open: 'Open network', signal: 'Signal', password: 'Password for', apps: 'Apps', settings: 'Settings', webApp: 'Web app', systemApp: 'System app · Home to return', settingsKind: 'Shell settings', addApp: 'Add app', addKind: 'Website or system app', brandSubtitle: 'Dedicated TV session', logout: 'Switch user', reboot: 'Restart', poweroff: 'Power off', newTile: 'New tile', website: 'Website', fromSystem: 'From system', systemGroup: 'System', updateTitle: 'Fedora TV OS update', checkUpdates: 'Check for updates', appearanceGroup: 'Appearance', backgroundTitle: 'Background image', chooseImage: 'Choose image', resetBackground: 'Reset background', myApps: 'My apps', done: 'Done', displayGroup: 'Picture', displayTitle: 'Displays', displayDescription: 'Choose a screen and configure its video mode. Changes are saved for future TV sessions.', displayOutput: 'Display', displayMode: 'Resolution and refresh rate', displayScale: 'Scale', displayRotation: 'Rotation', displayPositionX: 'Position X', displayPositionY: 'Position Y', displayEnabled: 'Use this display', displayEnabledHint: 'The only active display cannot be disabled.', adaptiveSync: 'Adaptive refresh rate', adaptiveSyncHint: 'Use VRR when supported by the display and video driver.', rotationNormal: 'Normal', apply: 'Apply', refreshDevices: 'Refresh devices', audioOutput: 'Output device', powerGroup: 'Power', powerTitle: 'Sleep, lid and buttons', powerDescription: 'The sleep timer applies to the TV session. Lid and physical power button settings apply to the whole device after system confirmation.', sleepAfter: 'Go to sleep after', never: 'Never', powerButton: 'Power button', askBeforePoweroff: 'Ask before powering off', poweroffNow: 'Power off', sleep: 'Sleep', doNothing: 'Do nothing', lidBattery: 'Close lid', lidExternalPower: 'Close lid on AC power', lidDocked: 'Close lid with external display', applyPower: 'Save power settings'
+    soundGroup: 'Sound', soundTitle: 'Volume', mute: 'Mute', unmute: 'Unmute', networkTitle: 'Wireless network', scan: 'Refresh list', connect: 'Connect', cancel: 'Cancel', languageGroup: 'Language', languageTitle: 'Interface language', inputGroup: 'Input', keyboardTitle: 'On-screen keyboard', keyboardDescription: 'Opens automatically for text fields. You can also use the ⌨ button in the top bar.', openKeyboard: 'Open keyboard', noNetworks: 'No Wi-Fi networks found.', wifiOff: 'Wi-Fi is off', connected: 'Connected', secured: 'Secured network', savedNetwork: 'Saved network', open: 'Open network', signal: 'Signal', password: 'Password for', apps: 'Apps', settings: 'Settings', webApp: 'Web app', systemApp: 'System app · Home to return', settingsKind: 'Shell settings', addApp: 'Add app', addKind: 'Website or system app', brandSubtitle: 'Dedicated TV session', logout: 'Switch user', reboot: 'Restart', poweroff: 'Power off', newTile: 'New tile', website: 'Website', fromSystem: 'From system', systemGroup: 'System', updateTitle: 'Fedora TV OS update', checkUpdates: 'Check for updates', appearanceGroup: 'Appearance', backgroundTitle: 'Background image', chooseImage: 'Choose image', resetBackground: 'Reset background', myApps: 'My apps', done: 'Done', displayGroup: 'Picture', displayTitle: 'Displays', displayDescription: 'Choose a screen and configure its video mode. Changes are saved for future TV sessions.', displayOutput: 'Display', displayMode: 'Resolution and refresh rate', displayScale: 'Scale', displayRotation: 'Rotation', displayPositionX: 'Position X', displayPositionY: 'Position Y', displayEnabled: 'Use this display', displayEnabledHint: 'The only active display cannot be disabled.', adaptiveSync: 'Adaptive refresh rate', adaptiveSyncHint: 'Use VRR when supported by the display and video driver.', rotationNormal: 'Normal', apply: 'Apply', refreshDevices: 'Refresh devices', audioOutput: 'Output device', powerGroup: 'Power', powerTitle: 'Sleep, lid and buttons', powerDescription: 'The sleep timer applies to the TV session. Lid and physical power button settings apply to the whole device after system confirmation.', sleepAfter: 'Go to sleep after', never: 'Never', powerButton: 'Power button', askBeforePoweroff: 'Ask before powering off', poweroffNow: 'Power off', sleep: 'Sleep', doNothing: 'Do nothing', lidBattery: 'Close lid', lidExternalPower: 'Close lid on AC power', lidDocked: 'Close lid with external display', applyPower: 'Save power settings', bluetoothTitle: 'Bluetooth', bluetoothDescription: 'Connect headphones, speakers, remotes, and other devices.', findDevices: 'Find devices', bluetoothOff: 'Bluetooth is off', noBluetoothDevices: 'No Bluetooth devices found.', paired: 'Paired', connecting: 'Connecting…', disconnect: 'Disconnect', categorySystem: 'System', categorySystemHint: 'Updates and power', categoryPicture: 'Picture and sound', categoryPictureHint: 'Display, scale, and volume', categoryConnections: 'Connections', categoryConnectionsHint: 'Wi‑Fi and Bluetooth', categoryAppearance: 'Appearance', categoryAppearanceHint: 'Background image', categoryInput: 'Language and input', categoryInputHint: 'Language and on-screen keyboard', categoryApps: 'Apps', categoryAppsHint: 'Added tiles', allSettings: 'All settings', filesEyebrow: 'File browser', filesTitle: 'Files', location: 'Location', filesHint: 'Choose a folder to browse it or a file to open it in the appropriate app.'
   }
 };
 
@@ -173,7 +195,10 @@ function applyLanguage(language) {
   renderKeyboard();
   if (latestAudioState) renderAudio(latestAudioState);
   if (latestWifiState) renderWifi(latestWifiState);
+  if (latestBluetoothState) renderBluetooth(latestBluetoothState);
   if (latestDisplayState) renderDisplays(latestDisplayState);
+  if (!filesBackdrop.hidden) renderFiles(currentFilesState);
+  if (!manageBackdrop.hidden) showSettingsCategory(activeSettingsCategory, false);
   updateClock();
 }
 
@@ -320,6 +345,7 @@ function activeOverlay() {
   if (!backdrop.hidden) return backdrop;
   if (!quickPanel.hidden) return quickPanel;
   if (!addBackdrop.hidden) return addBackdrop;
+  if (!filesBackdrop.hidden) return filesBackdrop;
   if (!manageBackdrop.hidden) return manageBackdrop;
   return null;
 }
@@ -537,27 +563,141 @@ function renderManageList() {
   }
 }
 
+const settingsCategoryCopy = {
+  system: { ru: ['Система', 'Обновление Fedora TV OS и поведение питания'], en: ['System', 'Fedora TV OS updates and power behavior'] },
+  picture: { ru: ['Изображение и звук', 'Экран, масштаб, частота и аудиовыход'], en: ['Picture and sound', 'Display, scale, refresh rate, and audio output'] },
+  connections: { ru: ['Подключения', 'Беспроводные сети и устройства Bluetooth'], en: ['Connections', 'Wireless networks and Bluetooth devices'] },
+  appearance: { ru: ['Оформление', 'Внешний вид домашнего экрана'], en: ['Appearance', 'Home screen look and feel'] },
+  input: { ru: ['Язык и ввод', 'Язык интерфейса и экранная клавиатура'], en: ['Language and input', 'Interface language and on-screen keyboard'] },
+  apps: { ru: ['Приложения', 'Управление добавленными плитками'], en: ['Apps', 'Manage added tiles'] }
+};
+
+function showSettingsCategory(category = null, moveFocus = true) {
+  activeSettingsCategory = settingsCategoryCopy[category] ? category : null;
+  settingsCategories.hidden = Boolean(activeSettingsCategory);
+  settingsPageHeader.hidden = !activeSettingsCategory;
+  document.querySelectorAll('[data-settings-category]').forEach((section) => {
+    section.hidden = section.dataset.settingsCategory !== activeSettingsCategory;
+  });
+  if (activeSettingsCategory) {
+    const [title, description] = settingsCategoryCopy[activeSettingsCategory][currentLanguage] || settingsCategoryCopy[activeSettingsCategory].ru;
+    document.getElementById('manage-title').textContent = title;
+    settingsPageDescription.textContent = description;
+  } else {
+    document.getElementById('manage-title').textContent = t('settings');
+    settingsPageDescription.textContent = '';
+  }
+  if (moveFocus) {
+    const target = activeSettingsCategory
+      ? settingsBack
+      : settingsCategories.querySelector('.settings-category');
+    requestAnimationFrame(() => refreshFocusables(target));
+  }
+}
+
 function openManagePanel() {
   if (!quickPanel.hidden) closeQuickPanel();
   overlayReturnFocus.set(manageBackdrop, document.activeElement);
   renderManageList();
   manageBackdrop.hidden = false;
-  refreshFocusables(0);
+  showSettingsCategory(null);
   loadSystemSettings().then(() => refreshFocusables(document.activeElement));
 }
 
 function closeManagePanel() {
   if (keyboardOpen) setKeyboardVisible(false);
   manageBackdrop.hidden = true;
+  activeSettingsCategory = null;
   refreshFocusables(overlayReturnFocus.get(manageBackdrop) || 0);
+}
+
+function fileSizeLabel(size) {
+  if (!Number.isFinite(Number(size))) return '';
+  const units = currentLanguage === 'en' ? ['B', 'KB', 'MB', 'GB', 'TB'] : ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+  let value = Number(size);
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit += 1; }
+  return `${value.toLocaleString(currentLanguage === 'en' ? 'en-US' : 'ru-RU', { maximumFractionDigits: unit ? 1 : 0 })} ${units[unit]}`;
+}
+
+function fileIcon(entry) {
+  if (entry.icon) return entry.icon;
+  return { root: '▱', folder: '▰', video: '▶', audio: '♪', image: '▧', document: '▤', archive: '▥', file: '·' }[entry.kind] || '·';
+}
+
+function renderFiles(state = {}) {
+  currentFilesState = state;
+  filesPath.textContent = state.path || (currentLanguage === 'en' ? 'Devices and folders' : 'Устройства и папки');
+  filesUp.disabled = !state.path;
+  filesList.replaceChildren();
+  if (!state.ok) {
+    renderWifiEmptyState(filesList, state.message || (currentLanguage === 'en' ? 'This folder is unavailable.' : 'Папка недоступна.'));
+    return;
+  }
+  if (!state.entries?.length) {
+    renderWifiEmptyState(filesList, currentLanguage === 'en' ? 'This folder is empty.' : 'В этой папке пока пусто.');
+    return;
+  }
+  for (const entry of state.entries) {
+    const button = document.createElement('button');
+    button.className = 'file-row focusable';
+    button.type = 'button';
+    button.innerHTML = '<span class="file-icon"></span><span class="file-copy"><strong></strong><small></small></span><span class="file-open">›</span>';
+    button.querySelector('.file-icon').textContent = fileIcon(entry);
+    button.querySelector('strong').textContent = currentLanguage === 'en' && entry.nameEn ? entry.nameEn : entry.name;
+    const detail = entry.directory
+      ? (currentLanguage === 'en' ? 'Folder' : 'Папка')
+      : [fileSizeLabel(entry.size), entry.modified ? new Intl.DateTimeFormat(currentLanguage === 'en' ? 'en-US' : 'ru-RU', { dateStyle: 'medium' }).format(entry.modified) : ''].filter(Boolean).join(' · ');
+    button.querySelector('small').textContent = detail;
+    button.addEventListener('click', async () => {
+      if (entry.directory) return navigateFiles(entry.path);
+      showToast(currentLanguage === 'en' ? 'Opening file…' : 'Открываем файл…');
+      const result = await window.tv.openFile(entry.path);
+      if (!result?.ok) showToast(result?.message || (currentLanguage === 'en' ? 'Could not open file' : 'Не удалось открыть файл'));
+    });
+    filesList.appendChild(button);
+  }
+}
+
+async function navigateFiles(directoryPath = null, preferred = 0) {
+  filesRefresh.disabled = true;
+  const result = await window.tv.listFiles(directoryPath);
+  filesRefresh.disabled = false;
+  if (!result?.ok) {
+    showToast(result?.message || (currentLanguage === 'en' ? 'Could not open folder' : 'Не удалось открыть папку'));
+    return;
+  }
+  renderFiles(result);
+  refreshFocusables(filesList.querySelector('.file-row') || preferred);
+}
+
+function openFilesPanel() {
+  if (!quickPanel.hidden) closeQuickPanel();
+  overlayReturnFocus.set(filesBackdrop, document.activeElement);
+  filesBackdrop.hidden = false;
+  filesList.innerHTML = `<div class="empty-state">${currentLanguage === 'en' ? 'Loading files…' : 'Загружаем файлы…'}</div>`;
+  refreshFocusables(filesClose);
+  navigateFiles(null);
+}
+
+function closeFilesPanel() {
+  filesBackdrop.hidden = true;
+  currentFilesState = { path: null, parentPath: null, entries: [] };
+  refreshFocusables(overlayReturnFocus.get(filesBackdrop) || 0);
+}
+
+function goBackInFiles() {
+  if (currentFilesState.path) return navigateFiles(currentFilesState.parentPath || null, filesUp);
+  closeFilesPanel();
 }
 
 function updateQuickPanelHeading(section = 'sound') {
   const sound = section === 'sound';
+  const bluetooth = section === 'bluetooth';
   quickPanelEyebrow.textContent = sound
     ? (currentLanguage === 'en' ? 'Sound' : 'Звук')
-    : 'Wi‑Fi';
-  quickPanelTitle.textContent = sound ? t('soundTitle') : t('networkTitle');
+    : bluetooth ? 'Bluetooth' : 'Wi‑Fi';
+  quickPanelTitle.textContent = sound ? t('soundTitle') : bluetooth ? t('bluetoothTitle') : t('networkTitle');
 }
 
 function openQuickPanel(section = 'sound') {
@@ -565,14 +705,17 @@ function openQuickPanel(section = 'sound') {
   quickPanel.dataset.section = section;
   quickSoundSection.hidden = section !== 'sound';
   quickWifiSection.hidden = section !== 'wifi';
+  quickBluetoothSection.hidden = section !== 'bluetooth';
   updateQuickPanelHeading(section);
   quickPanel.hidden = false;
   document.body.classList.add('quick-panel-open');
   topbarVolume.setAttribute('aria-expanded', String(section === 'sound'));
   topbarNetwork.setAttribute('aria-expanded', String(section === 'wifi'));
-  const target = section === 'wifi' ? quickWifiToggle : quickVolumeSlider;
+  topbarBluetooth.setAttribute('aria-expanded', String(section === 'bluetooth'));
+  const target = section === 'wifi' ? quickWifiToggle : section === 'bluetooth' ? quickBluetoothToggle : quickVolumeSlider;
   requestAnimationFrame(() => refreshFocusables(target));
-  loadSystemSettings().catch((error) => showToast(error.message));
+  if (section === 'bluetooth') window.tv.getBluetooth().then(renderBluetooth).catch((error) => showToast(error.message));
+  else loadSystemSettings().catch((error) => showToast(error.message));
 }
 
 function closeQuickPanel() {
@@ -581,6 +724,7 @@ function closeQuickPanel() {
   document.body.classList.remove('quick-panel-open');
   topbarVolume.setAttribute('aria-expanded', 'false');
   topbarNetwork.setAttribute('aria-expanded', 'false');
+  topbarBluetooth.setAttribute('aria-expanded', 'false');
   refreshFocusables(overlayReturnFocus.get(quickPanel) || 0);
 }
 
@@ -762,6 +906,66 @@ function renderWifi(state = {}) {
   renderWifiNetworks(quickWifiList, state, 'quick');
 }
 
+function renderBluetooth(state = {}) {
+  latestBluetoothState = state;
+  const enabled = Boolean(state.ok && state.enabled);
+  bluetoothToggle.setAttribute('aria-checked', String(enabled));
+  quickBluetoothToggle.setAttribute('aria-checked', String(enabled));
+  bluetoothToggle.disabled = state.available === false;
+  quickBluetoothToggle.disabled = state.available === false;
+  bluetoothScan.disabled = !enabled;
+  quickBluetoothScan.disabled = !enabled;
+  const connected = state.devices?.find((device) => device.connected);
+  const topbarIcon = topbarBluetooth.querySelector('i');
+  topbarIcon.className = `bluetooth-symbol${enabled ? '' : ' off'}${connected ? ' connected' : ''}`;
+  topbarBluetooth.querySelector('b').textContent = connected?.name
+    || (state.available === false
+      ? (currentLanguage === 'en' ? 'Unavailable' : 'Недоступно')
+      : enabled ? 'Bluetooth' : (currentLanguage === 'en' ? 'Off' : 'Выкл.'));
+  topbarBluetooth.classList.toggle('inactive', !enabled);
+  quickBluetoothState.textContent = connected?.name
+    || (enabled ? (currentLanguage === 'en' ? 'Select a device' : 'Выберите устройство') : t('bluetoothOff'));
+  renderBluetoothDevices(bluetoothList, state);
+  renderBluetoothDevices(quickBluetoothList, state);
+}
+
+function renderBluetoothDevices(container, state) {
+  container.replaceChildren();
+  if (!state.ok || !state.enabled) {
+    renderWifiEmptyState(container, state.enabled === false && state.available !== false ? t('bluetoothOff') : (state.message || t('noBluetoothDevices')));
+    return;
+  }
+  if (!state.devices?.length) {
+    renderWifiEmptyState(container, t('noBluetoothDevices'));
+    return;
+  }
+  for (const device of state.devices.slice(0, 24)) {
+    const button = document.createElement('button');
+    button.className = `bluetooth-device focusable${device.connected ? ' active' : ''}`;
+    button.type = 'button';
+    button.innerHTML = '<span class="bluetooth-device-icon">ᛒ</span><span class="bluetooth-device-copy"><strong></strong><small></small></span><b></b>';
+    button.querySelector('strong').textContent = device.name;
+    button.querySelector('small').textContent = device.connected ? t('connected') : device.paired ? t('paired') : device.address;
+    button.querySelector('b').textContent = device.connected ? t('disconnect') : t('connect');
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      button.querySelector('b').textContent = t('connecting');
+      const result = await window.tv.toggleBluetoothDevice(device.address);
+      if (!result?.ok) {
+        button.disabled = false;
+        button.querySelector('b').textContent = device.connected ? t('disconnect') : t('connect');
+        return showToast(result?.message || 'Bluetooth error');
+      }
+      renderBluetooth(result);
+      showToast(device.connected
+        ? (currentLanguage === 'en' ? 'Device disconnected' : 'Устройство отключено')
+        : (currentLanguage === 'en' ? 'Device connected' : 'Устройство подключено'));
+      refreshFocusables(container.querySelector('.bluetooth-device'));
+    });
+    container.appendChild(button);
+  }
+}
+
 function renderWifiNetworks(container, state, source) {
   container.innerHTML = '';
   if (!state.ok || !state.enabled) {
@@ -824,6 +1028,7 @@ async function loadSystemSettings() {
   applyLanguage(result.preferences?.language);
   renderAudio(result.audio);
   renderWifi(result.wifi);
+  renderBluetooth(result.bluetooth);
   renderDisplays(result.displays);
   renderPower(result.power || result.preferences?.power);
 }
@@ -994,6 +1199,7 @@ async function activate(element) {
   if (element.dataset.app) {
     const selectedApp = JSON.parse(element.dataset.app);
     if (selectedApp.action === 'settings') return openManagePanel();
+    if (selectedApp.action === 'files') return openFilesPanel();
     if (selectedApp.type === 'system') showToast('Открываем приложение · Home — вернуться в Fedora TV OS');
     const result = await window.tv.openApp(selectedApp);
     if (!result?.ok) showToast(result?.message || 'Не удалось открыть приложение');
@@ -1030,7 +1236,7 @@ async function renderApps() {
     button.dataset.app = JSON.stringify(app);
     button.innerHTML = '<span class="icon"></span><span class="title"></span>';
     renderAppIcon(button.querySelector('.icon'), app);
-    const builtInEnglishTitles = { vkvideo: 'VK Video', browser: 'Browser', settings: 'Settings' };
+    const builtInEnglishTitles = { vkvideo: 'VK Video', browser: 'Browser', files: 'Files', settings: 'Settings' };
     button.querySelector('.title').textContent = currentLanguage === 'en' ? (app.titleEn || builtInEnglishTitles[app.id] || app.title) : app.title;
     button.addEventListener('click', () => activate(button));
     makeCardInteractive(button);
@@ -1070,6 +1276,11 @@ async function loadApps() {
   document.querySelectorAll('[data-add-mode]').forEach((button) => button.addEventListener('click', () => setAddMode(button.dataset.addMode)));
   systemAppRefresh.addEventListener('click', loadSystemApps);
   document.querySelectorAll('[data-manage-close]').forEach((button) => button.addEventListener('click', closeManagePanel));
+  document.querySelectorAll('[data-settings-open]').forEach((button) => button.addEventListener('click', () => showSettingsCategory(button.dataset.settingsOpen)));
+  settingsBack.addEventListener('click', () => showSettingsCategory(null));
+  filesClose.addEventListener('click', closeFilesPanel);
+  filesUp.addEventListener('click', goBackInFiles);
+  filesRefresh.addEventListener('click', () => navigateFiles(currentFilesState.path, filesRefresh));
   dialogCancel.addEventListener('click', closeConfirm);
   dialogConfirm.addEventListener('click', async () => {
     if (!confirmHandler) return;
@@ -1140,6 +1351,10 @@ async function loadApps() {
   topbarNetwork.addEventListener('click', () => {
     if (!quickPanel.hidden && quickPanel.dataset.section === 'wifi') return closeQuickPanel();
     openQuickPanel('wifi');
+  });
+  topbarBluetooth.addEventListener('click', () => {
+    if (!quickPanel.hidden && quickPanel.dataset.section === 'bluetooth') return closeQuickPanel();
+    openQuickPanel('bluetooth');
   });
   quickPanelClose.addEventListener('click', closeQuickPanel);
   settingsShortcut.addEventListener('click', openManagePanel);
@@ -1264,6 +1479,38 @@ async function loadApps() {
     renderWifi(result);
     refreshFocusables(quickWifiScan);
   });
+  bluetoothToggle.addEventListener('click', async () => {
+    bluetoothToggle.disabled = true;
+    const result = await window.tv.toggleBluetooth(bluetoothToggle.getAttribute('aria-checked') !== 'true');
+    bluetoothToggle.disabled = false;
+    if (!result?.ok) return showToast(result?.message || 'Bluetooth error');
+    renderBluetooth(result);
+    refreshFocusables(bluetoothToggle);
+  });
+  quickBluetoothToggle.addEventListener('click', async () => {
+    quickBluetoothToggle.disabled = true;
+    const result = await window.tv.toggleBluetooth(quickBluetoothToggle.getAttribute('aria-checked') !== 'true');
+    quickBluetoothToggle.disabled = false;
+    if (!result?.ok) return showToast(result?.message || 'Bluetooth error');
+    renderBluetooth(result);
+    refreshFocusables(quickBluetoothToggle);
+  });
+  bluetoothScan.addEventListener('click', async () => {
+    bluetoothScan.disabled = true;
+    const result = await window.tv.scanBluetooth();
+    bluetoothScan.disabled = false;
+    if (!result?.ok) return showToast(result?.message || 'Bluetooth error');
+    renderBluetooth(result);
+    refreshFocusables(bluetoothScan);
+  });
+  quickBluetoothScan.addEventListener('click', async () => {
+    quickBluetoothScan.disabled = true;
+    const result = await window.tv.scanBluetooth();
+    quickBluetoothScan.disabled = false;
+    if (!result?.ok) return showToast(result?.message || 'Bluetooth error');
+    renderBluetooth(result);
+    refreshFocusables(quickBluetoothScan);
+  });
   wifiPasswordForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!selectedNetwork) return;
@@ -1307,7 +1554,7 @@ async function loadApps() {
 }
 
 function renderAppIcon(container, app, fallback = null) {
-  const builtInIcons = { youtube: 'youtube.svg', vkvideo: 'vk.svg', rutube: 'rutube.svg', twitch: 'twitch.svg', browser: 'google.svg', settings: 'fedora.svg' };
+  const builtInIcons = { youtube: 'youtube.svg', vkvideo: 'vk.svg', rutube: 'rutube.svg', twitch: 'twitch.svg', browser: 'google.svg', files: 'files.svg', settings: 'fedora.svg' };
   const iconFile = app.iconPath || builtInIcons[app.id];
   const source = app.iconDataUrl || (/^[a-z0-9_-]+\.svg$/i.test(iconFile || '') ? `../../assets/app-icons/${iconFile}` : null);
   container.replaceChildren();
@@ -1359,10 +1606,13 @@ function closeAllOverlays() {
   backdrop.hidden = true;
   quickPanel.hidden = true;
   addBackdrop.hidden = true;
+  filesBackdrop.hidden = true;
   manageBackdrop.hidden = true;
   document.body.classList.remove('quick-panel-open');
   topbarVolume.setAttribute('aria-expanded', 'false');
   topbarNetwork.setAttribute('aria-expanded', 'false');
+  topbarBluetooth.setAttribute('aria-expanded', 'false');
+  activeSettingsCategory = null;
   confirmHandler = null;
   window.tv.setConfirmationVisible(false);
 }
@@ -1375,7 +1625,8 @@ async function handleInputAction(action) {
     if (!backdrop.hidden) return closeConfirm();
     if (!quickPanel.hidden) return closeQuickPanel();
     if (!addBackdrop.hidden) return closeAddPanel();
-    if (!manageBackdrop.hidden) return closeManagePanel();
+    if (!filesBackdrop.hidden) return goBackInFiles();
+    if (!manageBackdrop.hidden) return activeSettingsCategory ? showSettingsCategory(null) : closeManagePanel();
     if (browserOpen) return window.tv.focusBrowser();
     return;
   }

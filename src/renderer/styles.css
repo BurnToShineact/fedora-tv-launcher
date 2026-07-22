@@ -1383,3 +1383,59 @@ body::before { opacity: .16; animation: none; }
   .system-pills { padding: 3px; }
   .status { gap: 5px; }
 }
+
+/* v2.7 — categorized settings, Bluetooth and file browser */
+.bluetooth-symbol { width: 22px; height: 22px; display: grid; place-items: center; color: #b9d6ff; }
+.bluetooth-symbol svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.bluetooth-symbol.off { color: #f2a0aa; opacity: .7; }
+.bluetooth-symbol.connected { color: #9ce2bd; filter: drop-shadow(0 0 7px rgba(112, 224, 166, .38)); }
+.quick-panel[data-section="bluetooth"] #quick-bluetooth-section { border-color: rgba(170, 207, 255, .28); background: linear-gradient(145deg, rgba(118, 164, 225, .13), rgba(255,255,255,.025)); }
+.bluetooth-list { display: grid; gap: 9px; margin-top: 14px; }
+.quick-bluetooth-list { max-height: 280px; overflow: auto; padding: 2px; }
+.bluetooth-device { width: 100%; min-width: 0; min-height: 64px; padding: 10px 12px; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 11px; border: 1px solid rgba(226, 237, 255, .12); border-radius: 16px; background: rgba(255, 255, 255, .045); text-align: left; outline: 3px solid transparent; }
+.bluetooth-device.active { border-color: rgba(130, 220, 175, .38); background: rgba(58, 142, 103, .16); }
+.bluetooth-device-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 13px; background: rgba(116, 164, 226, .2); color: #c9ddff; font-size: 20px; }
+.bluetooth-device-copy { min-width: 0; }
+.bluetooth-device-copy strong, .bluetooth-device-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bluetooth-device-copy strong { color: var(--text); font-size: 15px; }
+.bluetooth-device-copy small { margin-top: 4px; color: var(--muted); font-size: 12px; }
+.bluetooth-device > b { color: #c9ddff; font-size: 12px; }
+
+.settings-categories { margin-top: 24px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.settings-category { min-width: 0; min-height: 98px; padding: 16px; display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; align-items: center; gap: 14px; border: 1px solid rgba(231, 240, 255, .14); border-radius: 20px; background: linear-gradient(145deg, rgba(255,255,255,.085), rgba(255,255,255,.025)); text-align: left; outline: 3px solid transparent; transition: transform .18s ease, background .18s ease, border-color .18s ease; }
+.settings-category:hover, .settings-category:focus, .settings-category.focused { transform: translateY(-2px); border-color: rgba(211, 229, 255, .38); background: rgba(90, 128, 181, .2); }
+.settings-category-icon { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 17px; background: linear-gradient(145deg, rgba(185,216,255,.9), rgba(102,151,216,.88)); color: #102f58; font-size: 23px; font-weight: 800; }
+.settings-category > span:nth-child(2) { min-width: 0; }
+.settings-category strong, .settings-category small { display: block; }
+.settings-category strong { font-size: 17px; }
+.settings-category small { margin-top: 5px; overflow: hidden; color: var(--muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.settings-category > b { color: #b9cbe1; font-size: 28px; font-weight: 400; }
+.settings-page-header { margin-top: 20px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.settings-back { min-height: 46px; padding: 0 16px; display: flex; align-items: center; gap: 10px; border: 1px solid rgba(231,240,255,.16); border-radius: 16px; background: rgba(255,255,255,.06); outline: 3px solid transparent; }
+.settings-back span { font-size: 21px; }
+.settings-page-header p { margin: 0; color: var(--muted); font-size: 14px; text-align: right; }
+
+.files-panel { height: min(760px, 90vh); display: flex; flex-direction: column; overflow: hidden; }
+.files-toolbar { margin-top: 20px; padding: 10px; display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; align-items: center; gap: 10px; border: 1px solid rgba(231,240,255,.12); border-radius: 18px; background: rgba(8,15,24,.25); }
+.files-toolbar-button { width: 46px; height: 46px; border: 1px solid rgba(231,240,255,.14); border-radius: 14px; background: rgba(255,255,255,.06); font-size: 21px; outline: 3px solid transparent; }
+.files-toolbar-button:disabled { opacity: .35; }
+.files-location { min-width: 0; }
+.files-location span, .files-location strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.files-location span { color: var(--muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+.files-location strong { margin-top: 3px; font-size: 14px; }
+.files-list { min-height: 0; flex: 1; margin-top: 14px; padding: 4px; display: grid; align-content: start; gap: 8px; overflow: auto; scrollbar-width: thin; }
+.file-row { width: 100%; min-width: 0; min-height: 68px; padding: 10px 14px; display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 14px; border: 1px solid rgba(231,240,255,.11); border-radius: 17px; background: rgba(255,255,255,.045); text-align: left; outline: 3px solid transparent; }
+.file-row:hover, .file-row:focus, .file-row.focused { border-color: rgba(203,225,255,.38); background: rgba(91,130,184,.19); }
+.file-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 15px; background: rgba(117,164,225,.18); color: #c8ddfa; font-size: 21px; font-weight: 750; }
+.file-copy { min-width: 0; }
+.file-copy strong, .file-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-copy strong { font-size: 16px; }
+.file-copy small { margin-top: 5px; color: var(--muted); font-size: 12px; }
+.file-open { color: #aebfd3; font-size: 27px; }
+.files-hint { margin: 12px 4px 0; color: var(--muted); font-size: 12px; }
+
+@media (max-width: 760px) {
+  .settings-categories { grid-template-columns: 1fr; }
+  .settings-page-header { align-items: flex-start; flex-direction: column; }
+  .settings-page-header p { text-align: left; }
+}

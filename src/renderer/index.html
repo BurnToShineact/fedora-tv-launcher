@@ -60,6 +60,7 @@
       <div class="status">
         <div class="system-pills" aria-label="Состояние системы">
           <button class="status-pill focusable" id="topbar-network" type="button" aria-label="Выбрать сеть Wi‑Fi" aria-expanded="false"><i class="wifi-signal level-0" aria-hidden="true">◌</i><b>Wi‑Fi</b></button>
+          <button class="status-pill focusable" id="topbar-bluetooth" type="button" aria-label="Устройства Bluetooth" aria-expanded="false"><i class="bluetooth-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M7 7l10 10-5 4V3l5 4L7 17"/></svg></i><b>Bluetooth</b></button>
           <button class="status-pill focusable" id="topbar-volume" type="button" aria-label="Настроить громкость" aria-expanded="false"><i class="volume-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 10v4h4l5 4V6l-5 4H4Z"/><path d="M16 9.5a4 4 0 0 1 0 5"/><path d="M19 7a7 7 0 0 1 0 10"/></svg></i><b>—</b></button>
         </div>
         <button class="topbar-button focusable" id="keyboard-toggle" aria-label="Экранная клавиатура" title="Экранная клавиатура">
@@ -99,6 +100,15 @@
           <button class="dialog-button focusable" type="submit" data-i18n="connect">Подключиться</button>
           <button class="dialog-button secondary focusable" type="button" id="quick-wifi-password-cancel" data-i18n="cancel">Отмена</button>
         </form>
+      </section>
+      <section class="quick-section" id="quick-bluetooth-section" data-nav-zone="quick-bluetooth" data-nav-order="1" hidden>
+        <div class="quick-section-heading">
+          <span class="quick-icon" aria-hidden="true">ᛒ</span>
+          <div><strong data-i18n="bluetoothTitle">Bluetooth</strong><span id="quick-bluetooth-state">Устройства рядом</span></div>
+          <button class="switch focusable" id="quick-bluetooth-toggle" type="button" role="switch" aria-label="Включить или выключить Bluetooth" aria-checked="false"><span></span></button>
+        </div>
+        <div class="quick-actions"><button class="quick-action focusable" id="quick-bluetooth-scan" type="button" data-i18n="findDevices">Найти устройства</button></div>
+        <div class="bluetooth-list quick-bluetooth-list" id="quick-bluetooth-list" aria-live="polite"></div>
       </section>
     </aside>
 
@@ -195,7 +205,19 @@
         <div><p class="eyebrow" data-i18n="settings">Настройки</p><h2 id="manage-title">Настройки</h2></div>
         <button class="icon-button focusable" data-manage-close aria-label="Закрыть">×</button>
       </div>
-      <section class="settings-section update-section" data-nav-zone="settings-update" data-nav-order="1">
+      <div class="settings-categories" id="settings-categories" data-nav-zone="settings-categories" data-nav-order="1">
+        <button class="settings-category focusable" type="button" data-settings-open="system"><span class="settings-category-icon">⚙</span><span><strong data-i18n="categorySystem">Система</strong><small data-i18n="categorySystemHint">Обновления и питание</small></span><b>›</b></button>
+        <button class="settings-category focusable" type="button" data-settings-open="picture"><span class="settings-category-icon">▣</span><span><strong data-i18n="categoryPicture">Изображение и звук</strong><small data-i18n="categoryPictureHint">Экран, масштаб и громкость</small></span><b>›</b></button>
+        <button class="settings-category focusable" type="button" data-settings-open="connections"><span class="settings-category-icon">⌁</span><span><strong data-i18n="categoryConnections">Подключения</strong><small data-i18n="categoryConnectionsHint">Wi‑Fi и Bluetooth</small></span><b>›</b></button>
+        <button class="settings-category focusable" type="button" data-settings-open="appearance"><span class="settings-category-icon">◐</span><span><strong data-i18n="categoryAppearance">Оформление</strong><small data-i18n="categoryAppearanceHint">Фоновое изображение</small></span><b>›</b></button>
+        <button class="settings-category focusable" type="button" data-settings-open="input"><span class="settings-category-icon">⌨</span><span><strong data-i18n="categoryInput">Язык и ввод</strong><small data-i18n="categoryInputHint">Язык и экранная клавиатура</small></span><b>›</b></button>
+        <button class="settings-category focusable" type="button" data-settings-open="apps"><span class="settings-category-icon">▦</span><span><strong data-i18n="categoryApps">Приложения</strong><small data-i18n="categoryAppsHint">Добавленные плитки</small></span><b>›</b></button>
+      </div>
+      <div class="settings-page-header" id="settings-page-header" data-nav-zone="settings-page-header" data-nav-order="1" hidden>
+        <button class="settings-back focusable" id="settings-back" type="button"><span>←</span><b data-i18n="allSettings">Все настройки</b></button>
+        <p id="settings-page-description"></p>
+      </div>
+      <section class="settings-section update-section" data-settings-category="system" data-nav-zone="settings-update" data-nav-order="2" hidden>
         <div class="settings-heading">
           <div><p class="eyebrow" data-i18n="systemGroup">Система</p><h3 data-i18n="updateTitle">Обновление Fedora TV OS</h3></div>
           <span class="version-badge" id="app-version">Версия —</span>
@@ -208,7 +230,7 @@
           <button class="dialog-button focusable" id="update-install" hidden>Перезапустить и обновить</button>
         </div>
       </section>
-      <section class="settings-section" data-nav-zone="settings-display" data-nav-order="2">
+      <section class="settings-section" data-settings-category="picture" data-nav-zone="settings-display" data-nav-order="2" hidden>
         <div class="settings-heading">
           <div><p class="eyebrow" data-i18n="displayGroup">Изображение</p><h3 data-i18n="displayTitle">Дисплеи</h3></div>
           <span class="version-badge" id="display-status">—</span>
@@ -239,7 +261,7 @@
           <button class="dialog-button secondary focusable" id="display-refresh" data-i18n="refreshDevices">Обновить устройства</button>
         </div>
       </section>
-      <section class="settings-section" data-nav-zone="settings-sound" data-nav-order="3">
+      <section class="settings-section" data-settings-category="picture" data-nav-zone="settings-sound" data-nav-order="3" hidden>
         <div class="settings-heading">
           <div><p class="eyebrow" data-i18n="soundGroup">Звук</p><h3 data-i18n="soundTitle">Громкость</h3></div>
           <span class="version-badge" id="volume-value">—</span>
@@ -252,7 +274,7 @@
           <button class="dialog-button secondary focusable" id="mute-toggle" data-i18n="mute">Выключить звук</button>
         </div>
       </section>
-      <section class="settings-section" data-nav-zone="settings-wifi" data-nav-order="4">
+      <section class="settings-section" data-settings-category="connections" data-nav-zone="settings-wifi" data-nav-order="2" hidden>
         <div class="settings-heading">
           <div><p class="eyebrow">Wi‑Fi</p><h3 data-i18n="networkTitle">Беспроводная сеть</h3></div>
           <button class="switch focusable" id="wifi-toggle" role="switch" aria-checked="false"><span></span></button>
@@ -265,7 +287,16 @@
           <button class="dialog-button secondary focusable" type="button" id="wifi-password-cancel" data-i18n="cancel">Отмена</button>
         </form>
       </section>
-      <section class="settings-section" data-nav-zone="settings-power" data-nav-order="5">
+      <section class="settings-section" data-settings-category="connections" data-nav-zone="settings-bluetooth" data-nav-order="3" hidden>
+        <div class="settings-heading">
+          <div><p class="eyebrow">Bluetooth</p><h3 data-i18n="bluetoothTitle">Bluetooth</h3></div>
+          <button class="switch focusable" id="bluetooth-toggle" type="button" role="switch" aria-label="Включить или выключить Bluetooth" aria-checked="false"><span></span></button>
+        </div>
+        <p class="panel-description" data-i18n="bluetoothDescription">Подключайте наушники, колонки, пульты и другие устройства.</p>
+        <div class="update-actions settings-actions"><button class="dialog-button secondary focusable" id="bluetooth-scan" type="button" data-i18n="findDevices">Найти устройства</button></div>
+        <div class="bluetooth-list" id="bluetooth-list" aria-live="polite"></div>
+      </section>
+      <section class="settings-section" data-settings-category="system" data-nav-zone="settings-power" data-nav-order="3" hidden>
         <div class="settings-heading"><div><p class="eyebrow" data-i18n="powerGroup">Питание</p><h3 data-i18n="powerTitle">Сон, крышка и кнопки</h3></div></div>
         <p class="panel-description" data-i18n="powerDescription">Таймер сна действует в TV-сессии. Крышка и физическая кнопка питания настраиваются для всего устройства после системного подтверждения.</p>
         <div class="system-settings-grid power-grid">
@@ -287,19 +318,19 @@
         </div>
         <div class="update-actions settings-actions"><button class="dialog-button focusable" id="power-apply" data-i18n="applyPower">Сохранить настройки питания</button></div>
       </section>
-      <section class="settings-section" data-nav-zone="settings-language" data-nav-order="6">
+      <section class="settings-section" data-settings-category="input" data-nav-zone="settings-language" data-nav-order="2" hidden>
         <div class="settings-heading"><div><p class="eyebrow" data-i18n="languageGroup">Язык</p><h3 data-i18n="languageTitle">Язык интерфейса</h3></div></div>
         <div class="language-options" role="radiogroup">
           <button class="language-button focusable selected" data-language="ru">Русский</button>
           <button class="language-button focusable" data-language="en">English</button>
         </div>
       </section>
-      <section class="settings-section" data-nav-zone="settings-keyboard" data-nav-order="7">
+      <section class="settings-section" data-settings-category="input" data-nav-zone="settings-keyboard" data-nav-order="3" hidden>
         <div class="settings-heading"><div><p class="eyebrow" data-i18n="inputGroup">Ввод</p><h3 data-i18n="keyboardTitle">Экранная клавиатура</h3></div></div>
         <p class="panel-description" data-i18n="keyboardDescription">Открывается автоматически в полях ввода. Её также можно включить кнопкой ⌨ в верхней панели.</p>
         <button class="dialog-button secondary focusable" id="settings-keyboard-toggle" data-i18n="openKeyboard">Открыть клавиатуру</button>
       </section>
-      <section class="settings-section background-section" data-nav-zone="settings-background" data-nav-order="8">
+      <section class="settings-section background-section" data-settings-category="appearance" data-nav-zone="settings-background" data-nav-order="2" hidden>
         <div class="settings-heading">
           <div><p class="eyebrow" data-i18n="appearanceGroup">Оформление</p><h3 data-i18n="backgroundTitle">Фоновое изображение</h3></div>
         </div>
@@ -314,12 +345,28 @@
           </div>
         </div>
       </section>
-      <section class="settings-section" data-nav-zone="settings-apps" data-nav-order="9">
+      <section class="settings-section" data-settings-category="apps" data-nav-zone="settings-apps" data-nav-order="2" hidden>
         <div class="settings-heading"><div><p class="eyebrow" data-i18n="apps">Приложения</p><h3 data-i18n="myApps">Мои приложения</h3></div></div>
         <p class="panel-description">Здесь можно удалить добавленные вами сайты и системные приложения. Встроенные плитки защищены.</p>
         <div class="manage-list" id="manage-list"></div>
       </section>
       <div class="panel-actions" data-nav-zone="settings-done" data-nav-order="10"><button class="dialog-button focusable" data-manage-close data-i18n="done">Готово</button></div>
+    </section>
+  </div>
+
+  <div class="panel-backdrop" id="files-backdrop" hidden>
+    <section class="panel wide files-panel" role="dialog" aria-modal="true" aria-labelledby="files-title">
+      <div class="panel-header" data-nav-zone="files-header" data-nav-order="0">
+        <div><p class="eyebrow" data-i18n="filesEyebrow">Проводник</p><h2 id="files-title" data-i18n="filesTitle">Файлы</h2></div>
+        <button class="icon-button focusable" id="files-close" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <div class="files-toolbar" data-nav-zone="files-toolbar" data-nav-order="1">
+        <button class="files-toolbar-button focusable" id="files-up" type="button" aria-label="На уровень выше">↑</button>
+        <div class="files-location"><span data-i18n="location">Расположение</span><strong id="files-path">Устройства и папки</strong></div>
+        <button class="files-toolbar-button focusable" id="files-refresh" type="button" aria-label="Обновить">↻</button>
+      </div>
+      <div class="files-list" id="files-list" data-nav-zone="files-list" data-nav-order="2" aria-live="polite"></div>
+      <p class="files-hint" data-i18n="filesHint">Выберите папку для перехода или файл, чтобы открыть его в подходящем приложении.</p>
     </section>
   </div>
 

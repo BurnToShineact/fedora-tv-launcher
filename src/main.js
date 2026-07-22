@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, globalShortcut, session, dialog, nativeImage, components, powerMonitor } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, globalShortcut, session, dialog, nativeImage, components, powerMonitor, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { execFile, spawn } = require('child_process');
@@ -365,8 +365,15 @@ async function chooseBackground() {
 }
 
 function readApps() {
-  const source = fs.existsSync(appsPath()) ? appsPath() : bundledAppsPath();
-  return JSON.parse(fs.readFileSync(source, 'utf8'));
+  const bundled = JSON.parse(fs.readFileSync(bundledAppsPath(), 'utf8'));
+  if (!fs.existsSync(appsPath())) return bundled;
+  const saved = JSON.parse(fs.readFileSync(appsPath(), 'utf8'));
+  const missingBuiltIns = bundled.filter((builtIn) => !saved.some((item) => item.id === builtIn.id));
+  for (const builtIn of missingBuiltIns) {
+    const settingsIndex = saved.findIndex((item) => item.action === 'settings');
+    saved.splice(settingsIndex < 0 ? saved.length : settingsIndex, 0, builtIn);
+  }
+  return saved;
 }
 
 function writeApps(apps) {
@@ -798,6 +805,130 @@ function runSystemCommand(command, args = [], options = {}) {
   });
 }
 
+function fileBrowserRoots() {
+  const home = path.resolve(app.getPath('home'));
+  const userName = path.basename(home);
+  const candidates = [
+    { path: home, title: 'Домашняя папка', titleEn: 'Home', icon: '⌂' },
+    { path: path.join(home, 'Downloads'), title: 'Загрузки', titleEn: 'Downloads', icon: '↓' },
+    { path: path.join(home, 'Videos'), title: 'Видео', titleEn: 'Videos', icon: '▶' },
+    { path: path.join(home, 'Pictures'), title: 'Изображения', titleEn: 'Pictures', icon: '▧' },
+    { path: path.join('/run/media', userName), title: 'Съёмные носители', titleEn: 'Removable media', icon: '▱' },
+    { path: path.join('/media', userName), title: 'Подключённые диски', titleEn: 'Mounted drives', icon: '▱' },
+    { path: '/mnt', title: 'Другие диски', titleEn: 'Other drives', icon: '▱' }
+  ];
+  const unique = new Map();
+  for (const item of candidates) {
+    try {
+      const realPath = fs.realpathSync(item.path);
+      if (fs.statSync(realPath).isDirectory() && !unique.has(realPath)) unique.set(realPath, { ...item, path: realPath });
+    } catch {
+      // Не подключённые и отсутствующие пользовательские каталоги пропускаются.
+    }
+  }
+  return [...unique.values()];
+}
+
+function isInsideFileBrowserRoots(candidatePath, roots = fileBrowserRoots()) {
+  return roots.some((root) => candidatePath === root.path || candidatePath.startsWith(`${root.path}${path.sep}`));
+}
+
+function resolveBrowsablePath(candidate, roots = fileBrowserRoots()) {
+  if (typeof candidate !== 'string' || !path.isAbsolute(candidate)) return null;
+  try {
+    const realPath = fs.realpathSync(candidate);
+    return isInsideFileBrowserRoots(realPath, roots) ? realPath : null;
+  } catch {
+    return null;
+  }
+}
+
+function fileKind(filePath, directory) {
+  if (directory) return 'folder';
+  const extension = path.extname(filePath).toLowerCase();
+  if (['.mp4', '.mkv', '.webm', '.avi', '.mov', '.m4v'].includes(extension)) return 'video';
+  if (['.mp3', '.ogg', '.flac', '.wav', '.m4a', '.aac'].includes(extension)) return 'audio';
+  if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp'].includes(extension)) return 'image';
+  if (['.pdf', '.txt', '.md', '.doc', '.docx', '.odt', '.rtf'].includes(extension)) return 'document';
+  if (['.zip', '.tar', '.gz', '.bz2', '.xz', '.7z', '.rar'].includes(extension)) return 'archive';
+  return 'file';
+}
+
+async function listFiles(candidatePath) {
+  const roots = fileBrowserRoots();
+  if (!candidatePath) {
+    return {
+      ok: true,
+      path: null,
+      parentPath: null,
+      entries: roots.map((root) => ({
+        name: root.title,
+        nameEn: root.titleEn,
+        path: root.path,
+        directory: true,
+        kind: 'root',
+        icon: root.icon
+      }))
+    };
+  }
+
+  const directoryPath = resolveBrowsablePath(candidatePath, roots);
+  if (!directoryPath) return { ok: false, message: 'Эта папка недоступна.' };
+  let directoryEntries;
+  try {
+    directoryEntries = await fs.promises.readdir(directoryPath, { withFileTypes: true });
+  } catch (error) {
+    return { ok: false, message: `Не удалось открыть папку: ${error.message}` };
+  }
+
+  const entries = [];
+  for (const entry of directoryEntries.slice(0, 1000)) {
+    if (entry.name === '.' || entry.name === '..') continue;
+    const entryPath = path.join(directoryPath, entry.name);
+    try {
+      const realPath = fs.realpathSync(entryPath);
+      if (!isInsideFileBrowserRoots(realPath, roots)) continue;
+      const stat = fs.statSync(realPath);
+      const directory = stat.isDirectory();
+      entries.push({
+        name: entry.name,
+        path: realPath,
+        directory,
+        kind: fileKind(realPath, directory),
+        size: directory ? null : stat.size,
+        modified: stat.mtimeMs
+      });
+    } catch {
+      // Недоступные и исчезнувшие между чтением каталога и stat файлы пропускаются.
+    }
+  }
+  entries.sort((a, b) => Number(b.directory) - Number(a.directory) || a.name.localeCompare(b.name, 'ru', { numeric: true }));
+
+  const parentCandidate = path.dirname(directoryPath);
+  const parentPath = parentCandidate !== directoryPath && isInsideFileBrowserRoots(parentCandidate, roots) ? parentCandidate : null;
+  return { ok: true, path: directoryPath, parentPath, entries: entries.slice(0, 500) };
+}
+
+async function openFile(candidatePath) {
+  const filePath = resolveBrowsablePath(candidatePath, fileBrowserRoots());
+  if (!filePath) return { ok: false, message: 'Файл недоступен.' };
+  try {
+    if (!fs.statSync(filePath).isFile()) return { ok: false, message: 'Выберите файл.' };
+    restoreKioskWindow();
+    systemAppMode = true;
+    const message = await shell.openPath(filePath);
+    if (message) {
+      systemAppMode = false;
+      restoreKioskWindow();
+      return { ok: false, message };
+    }
+    return { ok: true, external: true };
+  } catch (error) {
+    systemAppMode = false;
+    return { ok: false, message: `Не удалось открыть файл: ${error.message}` };
+  }
+}
+
 function playbackIsActive() {
   return Boolean(
     browserMediaPlaying
@@ -864,6 +995,8 @@ app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
 ipcMain.handle('apps:get', () => readApps());
+ipcMain.handle('files:list', (_event, directoryPath) => listFiles(directoryPath));
+ipcMain.handle('files:open', (_event, filePath) => openFile(filePath));
 ipcMain.handle('background:get', () => readBackground());
 ipcMain.handle('background:choose', () => chooseBackground());
 ipcMain.handle('background:clear', () => {
@@ -930,7 +1063,7 @@ ipcMain.handle('app:open', async (_event, selectedApp) => {
   if (!selectedApp || typeof selectedApp !== 'object') return { ok: false };
   const storedApp = readApps().find((item) => item.id === selectedApp.id);
   if (!storedApp) return { ok: false, message: 'Приложение не найдено' };
-  if (storedApp.action === 'settings') return { ok: true, action: 'settings' };
+  if (['settings', 'files'].includes(storedApp.action)) return { ok: true, action: storedApp.action };
   if (storedApp.type === 'system') {
     const installedApp = findInstalledDesktopApp(storedApp.desktopId);
     if (!installedApp) return { ok: false, message: 'Приложение не найдено в системе' };
@@ -1073,6 +1206,119 @@ async function selectAudioOutput(id) {
   }
   const result = await runSystemCommand('wpctl', ['set-default', String(safeId)], { env: SYSTEM_COMMAND_ENV });
   return result.ok ? getAudioState() : result;
+}
+
+function parseBluetoothDeviceLines(output) {
+  const devices = new Map();
+  for (const line of String(output || '').split(/\r?\n/)) {
+    const match = line.trim().match(/^Device\s+([0-9A-F]{2}(?::[0-9A-F]{2}){5})\s+(.+)$/i);
+    if (match) devices.set(match[1].toUpperCase(), match[2].trim());
+  }
+  return devices;
+}
+
+async function bluetoothDevicesByFilter(filter) {
+  let result = await runSystemCommand('bluetoothctl', ['devices', filter], { timeout: 12000, env: SYSTEM_COMMAND_ENV });
+  if (!result.ok && filter === 'Paired') {
+    result = await runSystemCommand('bluetoothctl', ['paired-devices'], { timeout: 12000, env: SYSTEM_COMMAND_ENV });
+  }
+  return result.ok ? parseBluetoothDeviceLines(result.message) : new Map();
+}
+
+async function getBluetoothState(scan = false) {
+  const showResult = await runSystemCommand('bluetoothctl', ['show'], { timeout: 12000, env: SYSTEM_COMMAND_ENV });
+  if (!showResult.ok || !/^Controller\s/m.test(showResult.message)) {
+    const unavailable = /ENOENT|not found|spawn bluetoothctl/i.test(showResult.message);
+    return {
+      ok: false,
+      available: false,
+      enabled: false,
+      devices: [],
+      message: unavailable ? 'Установите BlueZ, чтобы использовать Bluetooth.' : 'Bluetooth-адаптер не найден.'
+    };
+  }
+
+  const enabled = /^\s*Powered:\s+yes\s*$/im.test(showResult.message);
+  if (scan && enabled) {
+    await runSystemCommand('bluetoothctl', ['--timeout', '6', 'scan', 'on'], { timeout: 9000, env: SYSTEM_COMMAND_ENV });
+  }
+  const [allResult, paired, connected] = await Promise.all([
+    runSystemCommand('bluetoothctl', ['devices'], { timeout: 12000, env: SYSTEM_COMMAND_ENV }),
+    bluetoothDevicesByFilter('Paired'),
+    bluetoothDevicesByFilter('Connected')
+  ]);
+  const all = allResult.ok ? parseBluetoothDeviceLines(allResult.message) : new Map();
+  for (const [address, name] of paired) if (!all.has(address)) all.set(address, name);
+  for (const [address, name] of connected) if (!all.has(address)) all.set(address, name);
+  const devices = [...all].map(([address, name]) => ({
+    address,
+    name,
+    paired: paired.has(address),
+    connected: connected.has(address)
+  })).sort((a, b) => Number(b.connected) - Number(a.connected) || Number(b.paired) - Number(a.paired) || a.name.localeCompare(b.name, 'ru'));
+  return { ok: true, available: true, enabled, discovering: /^\s*Discovering:\s+yes\s*$/im.test(showResult.message), devices };
+}
+
+function runBluetoothPairing(address) {
+  return new Promise((resolve) => {
+    const child = spawn('bluetoothctl', ['--timeout', '35'], { stdio: ['pipe', 'pipe', 'pipe'], env: SYSTEM_COMMAND_ENV });
+    let output = '';
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(result);
+    };
+    child.stdout.on('data', (chunk) => { output += String(chunk); });
+    child.stderr.on('data', (chunk) => { output += String(chunk); });
+    child.on('error', (error) => finish({ ok: false, message: error.message }));
+    child.on('close', (code) => {
+      const failed = /Failed to (?:pair|connect)|AuthenticationFailed|AuthenticationCanceled|not available/i.test(output);
+      finish(code === 0 && !failed
+        ? { ok: true }
+        : { ok: false, message: output.trim() || `bluetoothctl завершился с кодом ${code}` });
+    });
+    const timeout = setTimeout(() => {
+      child.kill('SIGTERM');
+      finish({ ok: false, message: 'Превышено время ожидания подключения Bluetooth.' });
+    }, 40000);
+    child.stdin.end(`agent NoInputNoOutput\ndefault-agent\npair ${address}\ntrust ${address}\nconnect ${address}\nquit\n`);
+  });
+}
+
+function normalizeBluetoothError(message) {
+  const detail = String(message || '');
+  if (/AuthenticationFailed|AuthenticationCanceled|AuthenticationRejected/i.test(detail)) {
+    return 'Сопряжение не удалось. Переведите устройство в режим подключения и попробуйте снова.';
+  }
+  if (/not available|not connected|le-connection-abort-by-local|page-timeout/i.test(detail)) {
+    return 'Устройство не отвечает. Убедитесь, что оно рядом и находится в режиме подключения.';
+  }
+  if (/InProgress|Operation already in progress/i.test(detail)) return 'Подключение уже выполняется.';
+  return detail.trim() || 'Не удалось подключить устройство Bluetooth.';
+}
+
+async function toggleBluetooth(enabled) {
+  const result = await runSystemCommand('bluetoothctl', ['power', enabled ? 'on' : 'off'], { timeout: 15000, env: SYSTEM_COMMAND_ENV });
+  return result.ok ? getBluetoothState(Boolean(enabled)) : result;
+}
+
+async function toggleBluetoothDevice(address) {
+  const normalizedAddress = String(address || '').toUpperCase();
+  if (!/^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$/.test(normalizedAddress)) return { ok: false, message: 'Некорректный адрес устройства.' };
+  const state = await getBluetoothState(false);
+  if (!state.ok) return state;
+  const device = state.devices.find((item) => item.address === normalizedAddress);
+  if (!device) return { ok: false, message: 'Устройство больше недоступно. Обновите список.' };
+  const result = device.connected
+    ? await runSystemCommand('bluetoothctl', ['disconnect', normalizedAddress], { timeout: 20000, env: SYSTEM_COMMAND_ENV })
+    : device.paired
+      ? await runSystemCommand('bluetoothctl', ['connect', normalizedAddress], { timeout: 30000, env: SYSTEM_COMMAND_ENV })
+      : await runBluetoothPairing(normalizedAddress);
+  if (!result.ok) return { ok: false, message: normalizeBluetoothError(result.message) };
+  await new Promise((resolve) => setTimeout(resolve, 450));
+  return getBluetoothState(false);
 }
 
 function normalizeDisplayMode(mode = {}) {
@@ -1317,8 +1563,8 @@ async function setPowerSettings(candidate) {
 
 ipcMain.handle('settings:get', async () => {
   const preferences = readSettings();
-  const [audio, wifi, displays] = await Promise.all([getAudioState(), getWifiState(false), getDisplayState()]);
-  return { ok: true, preferences, audio, wifi, displays, power: { ok: true, ...preferences.power } };
+  const [audio, wifi, bluetooth, displays] = await Promise.all([getAudioState(), getWifiState(false), getBluetoothState(false), getDisplayState()]);
+  return { ok: true, preferences, audio, wifi, bluetooth, displays, power: { ok: true, ...preferences.power } };
 });
 ipcMain.handle('settings:get-preferences', () => readSettings());
 ipcMain.handle('audio:set-volume', async (_event, volume) => {
@@ -1340,6 +1586,10 @@ ipcMain.handle('wifi:toggle', async (_event, enabled) => {
   return result.ok ? getWifiState(Boolean(enabled)) : result;
 });
 ipcMain.handle('wifi:connect', (_event, candidate) => connectWifi(candidate));
+ipcMain.handle('bluetooth:get', () => getBluetoothState(false));
+ipcMain.handle('bluetooth:scan', () => getBluetoothState(true));
+ipcMain.handle('bluetooth:toggle', (_event, enabled) => toggleBluetooth(Boolean(enabled)));
+ipcMain.handle('bluetooth:device-toggle', (_event, address) => toggleBluetoothDevice(address));
 ipcMain.handle('language:set', (_event, language) => writeSettings({ language: language === 'en' ? 'en' : 'ru' }));
 ipcMain.on('external:home', showLauncher);
 

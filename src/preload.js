@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('tv', {
   getApps: () => ipcRenderer.invoke('apps:get'),
+  listFiles: (directoryPath) => ipcRenderer.invoke('files:list', directoryPath),
+  openFile: (filePath) => ipcRenderer.invoke('files:open', filePath),
   addApp: (app) => ipcRenderer.invoke('apps:add', app),
   getSystemApps: () => ipcRenderer.invoke('system-apps:get'),
   addSystemApp: (desktopId) => ipcRenderer.invoke('system-apps:add', desktopId),
@@ -29,6 +31,10 @@ contextBridge.exposeInMainWorld('tv', {
   scanWifi: () => ipcRenderer.invoke('wifi:scan'),
   toggleWifi: (enabled) => ipcRenderer.invoke('wifi:toggle', enabled),
   connectWifi: (candidate) => ipcRenderer.invoke('wifi:connect', candidate),
+  getBluetooth: () => ipcRenderer.invoke('bluetooth:get'),
+  scanBluetooth: () => ipcRenderer.invoke('bluetooth:scan'),
+  toggleBluetooth: (enabled) => ipcRenderer.invoke('bluetooth:toggle', enabled),
+  toggleBluetoothDevice: (address) => ipcRenderer.invoke('bluetooth:device-toggle', address),
   setLanguage: (language) => ipcRenderer.invoke('language:set', language),
   systemAction: (action) => ipcRenderer.invoke('system:action', action),
   toggleFullscreen: () => ipcRenderer.invoke('window:toggle-fullscreen'),
