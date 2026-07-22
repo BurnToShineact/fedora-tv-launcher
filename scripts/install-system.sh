@@ -21,7 +21,7 @@ if [[ ! -f "$RPM_FILE" ]]; then
   exit 1
 fi
 
-/usr/bin/dnf install -y labwc wlrctl flatpak polkit lxqt-policykit "$RPM_FILE"
+/usr/bin/dnf install -y labwc wlrctl wlr-randr flatpak polkit lxqt-policykit "$RPM_FILE"
 
 if [[ ! -x /usr/libexec/fedora-tv-os-session || ! -f /usr/share/wayland-sessions/fedora-tv-os.desktop ]]; then
   printf 'RPM установлен, но Wayland-сессия не зарегистрирована. Проверьте журнал установки пакета.\n' >&2

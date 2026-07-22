@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, globalShortcut, session, dialog, nativeImage, components } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, globalShortcut, session, dialog, nativeImage, components, powerMonitor } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { execFile, spawn } = require('child_process');
@@ -9,6 +9,7 @@ let browserView;
 let browserVisible = false;
 let keyboardVisible = false;
 let browserFullscreen = false;
+let browserMediaPlaying = false;
 let updateState = { status: 'idle', version: app.getVersion(), progress: 0, message: '' };
 let updateCheckInProgress = false;
 let downloadedUpdatePath = null;
@@ -17,6 +18,8 @@ let mediaComponentsReady = Promise.resolve(false);
 let protectedMediaVersion = null;
 let systemAppMode = false;
 let confirmationVisible = false;
+let idleActionInProgress = false;
+let lastIdleActionAt = 0;
 let pendingLauncherAction = process.argv.includes('--poweroff') ? 'poweroff' : null;
 const isDev = process.argv.includes('--dev');
 const isTvSession = process.argv.includes('--tv-session') || process.env.FEDORA_TV_SESSION === '1';
@@ -25,6 +28,14 @@ const BROWSER_TOOLBAR_HEIGHT = 70;
 const KEYBOARD_HEIGHT = 292;
 const KEYBOARD_VIEWPORT_RATIO = 0.48;
 const WEB_PARTITION = 'persist:fedora-tv';
+const POWER_DEFAULTS = {
+  idleTimeout: 0,
+  powerButtonAction: 'ask',
+  lidAction: 'suspend',
+  lidExternalAction: 'suspend',
+  lidDockedAction: 'ignore'
+};
+const SYSTEM_COMMAND_ENV = { ...process.env, LC_ALL: 'C', LANG: 'C' };
 
 function configureWidevine() {
   if (process.platform !== 'linux') return null;
@@ -293,9 +304,10 @@ function settingsPath() {
 
 function readSettings() {
   try {
-    return { language: 'ru', ...JSON.parse(fs.readFileSync(settingsPath(), 'utf8')) };
+    const saved = JSON.parse(fs.readFileSync(settingsPath(), 'utf8'));
+    return { language: 'ru', ...saved, power: { ...POWER_DEFAULTS, ...(saved.power || {}) } };
   } catch {
-    return { language: 'ru' };
+    return { language: 'ru', power: { ...POWER_DEFAULTS } };
   }
 }
 
@@ -599,6 +611,8 @@ function ensureBrowserView() {
     resizeBrowserView();
     sendBrowserState();
   });
+  browserView.webContents.on('media-started-playing', () => { browserMediaPlaying = true; });
+  browserView.webContents.on('media-paused', () => { browserMediaPlaying = false; });
 
   browserView.webContents.on('before-input-event', (event, input) => {
     const key = input.key;
@@ -642,6 +656,7 @@ function showLauncher() {
     })()`).catch(() => {});
   }
   browserVisible = false;
+  browserMediaPlaying = false;
   keyboardVisible = false;
   browserFullscreen = false;
   if (systemAppMode) {
@@ -770,13 +785,41 @@ function createWindow() {
   if (isDev) mainWindow.webContents.openDevTools({ mode: 'detach' });
 }
 
-function runSystemCommand(command, args = []) {
+function runSystemCommand(command, args = [], options = {}) {
   return new Promise((resolve) => {
-    execFile(command, args, { timeout: 10000 }, (error, stdout, stderr) => {
-      if (error) resolve({ ok: false, message: stderr || error.message });
+    execFile(command, args, {
+      timeout: options.timeout || 10000,
+      maxBuffer: options.maxBuffer || 2 * 1024 * 1024,
+      env: options.env || process.env
+    }, (error, stdout, stderr) => {
+      if (error) resolve({ ok: false, message: String(stderr || error.message).trim() });
       else resolve({ ok: true, message: stdout.trim() });
     });
   });
+}
+
+function playbackIsActive() {
+  return Boolean(
+    browserMediaPlaying
+    ||
+    mainWindow?.webContents?.isCurrentlyAudible?.()
+    || browserView?.webContents?.isCurrentlyAudible?.()
+  );
+}
+
+function startIdleMonitor() {
+  if (!isTvSession) return;
+  setInterval(async () => {
+    const timeoutMinutes = Number(readSettings().power?.idleTimeout) || 0;
+    if (!timeoutMinutes || idleActionInProgress || playbackIsActive()) return;
+    let idleSeconds = 0;
+    try { idleSeconds = powerMonitor.getSystemIdleTime(); } catch { return; }
+    if (idleSeconds < timeoutMinutes * 60 || Date.now() - lastIdleActionAt < 120000) return;
+    idleActionInProgress = true;
+    lastIdleActionAt = Date.now();
+    await runSystemCommand('systemctl', ['suspend'], { timeout: 30000 });
+    idleActionInProgress = false;
+  }, 30000).unref();
 }
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -795,6 +838,8 @@ app.whenReady().then(() => {
   if (updatesEnabled) configureUpdater();
   createWindow();
   initializeMediaComponents();
+  startIdleMonitor();
+  if (isTvSession) setTimeout(() => applySavedDisplayConfiguration(), 1600);
   mainWindow.webContents.once('did-finish-load', () => {
     sendUpdateState();
     if (pendingLauncherAction) {
@@ -978,6 +1023,7 @@ ipcMain.handle('system:action', async (_event, action) => {
   }
   if (action === 'poweroff') return runSystemCommand('systemctl', ['poweroff']);
   if (action === 'reboot') return runSystemCommand('systemctl', ['reboot']);
+  if (action === 'suspend') return runSystemCommand('systemctl', ['suspend'], { timeout: 30000 });
   if (['volume-up', 'volume-down', 'mute'].includes(action)) {
     const args = action === 'mute'
       ? ['set-mute', '@DEFAULT_AUDIO_SINK@', 'toggle']
@@ -991,6 +1037,158 @@ ipcMain.handle('system:action', async (_event, action) => {
 function parseVolume(output) {
   const match = String(output).match(/Volume:\s+([0-9.]+)/i);
   return { volume: match ? Math.round(Number(match[1]) * 100) : 0, muted: /\[MUTED\]/i.test(output) };
+}
+
+function parseWpctlSinks(output) {
+  const sinks = [];
+  let inSinks = false;
+  for (const originalLine of String(output).replace(/\x1b\[[0-9;]*m/g, '').split(/\r?\n/)) {
+    if (/\bSinks:\s*$/.test(originalLine)) { inSinks = true; continue; }
+    if (inSinks && /\b(?:Sources|Filters|Streams):\s*$/.test(originalLine)) break;
+    if (!inSinks) continue;
+    const line = originalLine.replace(/^[\s│├└─]+/, '');
+    const match = line.match(/^(\*)?\s*(\d+)\.\s+(.+?)\s*$/);
+    if (!match) continue;
+    const name = match[3].replace(/\s+\[vol:.*$/i, '').trim();
+    if (name) sinks.push({ id: Number(match[2]), name, default: Boolean(match[1]) });
+  }
+  return sinks;
+}
+
+async function getAudioState() {
+  const [volumeResult, statusResult] = await Promise.all([
+    runSystemCommand('wpctl', ['get-volume', '@DEFAULT_AUDIO_SINK@'], { env: SYSTEM_COMMAND_ENV }),
+    runSystemCommand('wpctl', ['status'], { env: SYSTEM_COMMAND_ENV })
+  ]);
+  if (!volumeResult.ok) return volumeResult;
+  return { ok: true, ...parseVolume(volumeResult.message), outputs: statusResult.ok ? parseWpctlSinks(statusResult.message) : [] };
+}
+
+async function selectAudioOutput(id) {
+  const safeId = Number(id);
+  const audio = await getAudioState();
+  if (!audio.ok) return audio;
+  if (!Number.isInteger(safeId) || !audio.outputs.some((output) => output.id === safeId)) {
+    return { ok: false, message: 'Аудиовыход больше недоступен. Обновите список.' };
+  }
+  const result = await runSystemCommand('wpctl', ['set-default', String(safeId)], { env: SYSTEM_COMMAND_ENV });
+  return result.ok ? getAudioState() : result;
+}
+
+function normalizeDisplayMode(mode = {}) {
+  const width = Math.round(Number(mode.width) || 0);
+  const height = Math.round(Number(mode.height) || 0);
+  const refresh = Number(mode.refresh) || 0;
+  return {
+    width,
+    height,
+    refresh,
+    preferred: Boolean(mode.preferred),
+    current: Boolean(mode.current),
+    id: `${width}x${height}@${refresh.toFixed(3)}`
+  };
+}
+
+function normalizeDisplayOutput(output = {}) {
+  const position = output.position || {};
+  const adaptiveValue = output.adaptive_sync ?? output.adaptiveSync;
+  return {
+    name: String(output.name || '').slice(0, 128),
+    description: String(output.description || [output.make, output.model].filter(Boolean).join(' ') || output.name || '').slice(0, 240),
+    make: String(output.make || '').slice(0, 120),
+    model: String(output.model || '').slice(0, 120),
+    enabled: output.enabled !== false,
+    x: Math.round(Number(position.x ?? output.x) || 0),
+    y: Math.round(Number(position.y ?? output.y) || 0),
+    scale: Math.max(0.5, Math.min(3, Number(output.scale) || 1)),
+    transform: String(output.transform || 'normal'),
+    adaptiveSync: adaptiveValue == null ? null : adaptiveValue === true || adaptiveValue === 'enabled',
+    modes: Array.isArray(output.modes) ? output.modes.map(normalizeDisplayMode).filter((mode) => mode.width && mode.height) : []
+  };
+}
+
+async function getDisplayState() {
+  const result = await runSystemCommand('wlr-randr', ['--json'], { env: SYSTEM_COMMAND_ENV });
+  if (!result.ok) {
+    const unavailable = /ENOENT|not found|spawn wlr-randr/i.test(result.message);
+    return {
+      ok: false,
+      available: false,
+      message: unavailable
+        ? 'Установите пакет wlr-randr, чтобы управлять дисплеями.'
+        : `Не удалось прочитать дисплеи: ${result.message}`
+    };
+  }
+  try {
+    const parsed = JSON.parse(result.message || '[]');
+    const outputs = (Array.isArray(parsed) ? parsed : parsed.outputs || []).map(normalizeDisplayOutput).filter((output) => output.name);
+    return { ok: true, available: true, outputs };
+  } catch {
+    return { ok: false, available: false, message: 'wlr-randr вернул неизвестный формат данных.' };
+  }
+}
+
+function validateDisplayCandidate(candidate, displayState) {
+  const output = displayState.outputs.find((item) => item.name === String(candidate?.output || ''));
+  if (!output) return { error: 'Выбранный дисплей больше недоступен.' };
+  const enabled = candidate?.enabled !== false;
+  if (!enabled && output.enabled && displayState.outputs.filter((item) => item.enabled).length <= 1) {
+    return { error: 'Нельзя отключить единственный активный дисплей.' };
+  }
+  const modeId = String(candidate?.mode || '');
+  const mode = output.modes.find((item) => item.id === modeId)
+    || output.modes.find((item) => item.current)
+    || output.modes.find((item) => item.preferred);
+  if (enabled && !mode) return { error: 'Для дисплея не найден поддерживаемый видеорежим.' };
+  const scale = Math.max(0.5, Math.min(3, Number(candidate?.scale) || output.scale || 1));
+  const transforms = ['normal', '90', '180', '270', 'flipped', 'flipped-90', 'flipped-180', 'flipped-270'];
+  const transform = transforms.includes(candidate?.transform) ? candidate.transform : output.transform;
+  const x = Math.max(-32768, Math.min(32768, Math.round(Number(candidate?.x) || 0)));
+  const y = Math.max(-32768, Math.min(32768, Math.round(Number(candidate?.y) || 0)));
+  const adaptiveSync = output.adaptiveSync == null ? null : Boolean(candidate?.adaptiveSync);
+  return { output, enabled, mode, scale, transform, x, y, adaptiveSync };
+}
+
+async function applyDisplaySettings(candidate, persist = true) {
+  const state = await getDisplayState();
+  if (!state.ok) return state;
+  const settings = validateDisplayCandidate(candidate, state);
+  if (settings.error) return { ok: false, message: settings.error };
+  const args = ['--output', settings.output.name];
+  if (!settings.enabled) {
+    args.push('--off');
+  } else {
+    args.push('--on', '--mode', `${settings.mode.width}x${settings.mode.height}@${settings.mode.refresh.toFixed(3)}Hz`);
+    args.push('--scale', String(settings.scale), '--transform', settings.transform, '--pos', `${settings.x},${settings.y}`);
+    if (settings.adaptiveSync != null) args.push('--adaptive-sync', settings.adaptiveSync ? 'enabled' : 'disabled');
+  }
+  const result = await runSystemCommand('wlr-randr', args, { env: SYSTEM_COMMAND_ENV });
+  if (!result.ok) return { ok: false, message: `Не удалось применить настройки дисплея: ${result.message}` };
+  if (persist) {
+    const preferences = readSettings();
+    const displayConfigurations = { ...(preferences.displayConfigurations || {}) };
+    displayConfigurations[settings.output.name] = {
+      output: settings.output.name,
+      enabled: settings.enabled,
+      mode: settings.mode?.id || '',
+      scale: settings.scale,
+      transform: settings.transform,
+      x: settings.x,
+      y: settings.y,
+      adaptiveSync: settings.adaptiveSync
+    };
+    writeSettings({ displayConfigurations });
+  }
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  return getDisplayState();
+}
+
+async function applySavedDisplayConfiguration() {
+  const configurations = Object.values(readSettings().displayConfigurations || {});
+  configurations.sort((a, b) => Number(b.enabled !== false) - Number(a.enabled !== false));
+  for (const configuration of configurations) {
+    await applyDisplaySettings(configuration, false);
+  }
 }
 
 function splitNmcliLine(line) {
@@ -1007,28 +1205,120 @@ function splitNmcliLine(line) {
   return values;
 }
 
-async function getAudioState() {
-  const result = await runSystemCommand('wpctl', ['get-volume', '@DEFAULT_AUDIO_SINK@']);
-  return result.ok ? { ok: true, ...parseVolume(result.message) } : result;
+async function getSavedWifiConnections() {
+  const result = await runSystemCommand('nmcli', ['-t', '--escape', 'yes', '-f', 'NAME,UUID,TYPE,AUTOCONNECT', 'connection', 'show'], { env: SYSTEM_COMMAND_ENV });
+  if (!result.ok) return [];
+  const profiles = result.message.split(/\r?\n/).filter(Boolean).map((line) => {
+    const [name, uuid, type, autoconnect] = splitNmcliLine(line);
+    return { name, uuid, type, autoconnect: /^yes$/i.test(autoconnect) };
+  }).filter((profile) => ['wifi', '802-11-wireless'].includes(profile.type) && /^[0-9a-f-]{32,36}$/i.test(profile.uuid));
+  await Promise.all(profiles.slice(0, 40).map(async (profile) => {
+    const ssidResult = await runSystemCommand('nmcli', ['-g', '802-11-wireless.ssid', 'connection', 'show', 'uuid', profile.uuid], { env: SYSTEM_COMMAND_ENV });
+    profile.ssid = ssidResult.ok ? splitNmcliLine(ssidResult.message.split(/\r?\n/)[0] || '')[0] : profile.name;
+  }));
+  return profiles.filter((profile) => profile.ssid);
 }
 
 async function getWifiState(rescan = false) {
-  const [enabledResult, listResult] = await Promise.all([
-    runSystemCommand('nmcli', ['-t', '-f', 'WIFI', 'general']),
-    runSystemCommand('nmcli', ['-t', '--escape', 'yes', '-f', 'IN-USE,SSID,SIGNAL,SECURITY', 'device', 'wifi', 'list', '--rescan', rescan ? 'yes' : 'auto'])
+  const [enabledResult, listResult, savedConnections] = await Promise.all([
+    runSystemCommand('nmcli', ['-t', '-f', 'WIFI', 'general'], { env: SYSTEM_COMMAND_ENV }),
+    runSystemCommand('nmcli', ['-t', '--escape', 'yes', '-f', 'IN-USE,SSID,SIGNAL,SECURITY,DEVICE', 'device', 'wifi', 'list', '--rescan', rescan ? 'yes' : 'auto'], { env: SYSTEM_COMMAND_ENV }),
+    getSavedWifiConnections()
   ]);
   if (!listResult.ok) return listResult;
   const networks = listResult.message.split(/\r?\n/).filter(Boolean).map((line) => {
-    const [active, ssid, signal, security] = splitNmcliLine(line);
-    return { active: active === '*', ssid, signal: Number(signal) || 0, secure: Boolean(security && security !== '--') };
+    const [active, ssid, signal, security, device] = splitNmcliLine(line);
+    const saved = savedConnections.find((profile) => profile.ssid === ssid);
+    return {
+      active: active === '*', ssid, signal: Number(signal) || 0,
+      secure: Boolean(security && security !== '--'), device,
+      saved: Boolean(saved), uuid: saved?.uuid || null, autoconnect: Boolean(saved?.autoconnect)
+    };
   }).filter((network) => network.ssid).filter((network, index, all) => all.findIndex((item) => item.ssid === network.ssid) === index).sort((a, b) => Number(b.active) - Number(a.active) || b.signal - a.signal);
   return { ok: true, enabled: /enabled/i.test(enabledResult.message), networks };
 }
 
+async function connectWifi(candidate) {
+  const ssid = String(candidate?.ssid || '').slice(0, 128);
+  const password = String(candidate?.password || '').slice(0, 256);
+  if (!ssid) return { ok: false, message: 'Сеть не выбрана' };
+  const savedConnections = await getSavedWifiConnections();
+  const requestedUuid = /^[0-9a-f-]{32,36}$/i.test(String(candidate?.uuid || '')) ? String(candidate.uuid) : '';
+  const saved = savedConnections.find((profile) => profile.ssid === ssid && (!requestedUuid || profile.uuid === requestedUuid));
+
+  if (saved) {
+    if (password) {
+      const secretResult = await runSystemCommand('nmcli', ['connection', 'modify', 'uuid', saved.uuid, 'wifi-sec.psk', password, 'connection.autoconnect', 'yes'], { env: SYSTEM_COMMAND_ENV });
+      if (!secretResult.ok) return secretResult;
+    } else {
+      await runSystemCommand('nmcli', ['connection', 'modify', 'uuid', saved.uuid, 'connection.autoconnect', 'yes'], { env: SYSTEM_COMMAND_ENV });
+    }
+    const activateResult = await runSystemCommand('nmcli', ['--wait', '30', 'connection', 'up', 'uuid', saved.uuid], { timeout: 40000, env: SYSTEM_COMMAND_ENV });
+    if (!activateResult.ok) return { ...activateResult, needsPassword: true };
+    return getWifiState(false);
+  }
+
+  const args = ['--wait', '30', 'device', 'wifi', 'connect', ssid];
+  if (password) args.push('password', password);
+  const result = await runSystemCommand('nmcli', args, { timeout: 40000, env: SYSTEM_COMMAND_ENV });
+  if (!result.ok) return result;
+  const created = (await getSavedWifiConnections()).find((profile) => profile.ssid === ssid);
+  if (created) await runSystemCommand('nmcli', ['connection', 'modify', 'uuid', created.uuid, 'connection.autoconnect', 'yes'], { env: SYSTEM_COMMAND_ENV });
+  return getWifiState(false);
+}
+
+function powerHelperPath() {
+  const installed = '/usr/libexec/fedora-tv-os-system-settings';
+  const bundled = app.isPackaged
+    ? path.join(process.resourcesPath, 'tv-session', 'fedora-tv-os-system-settings')
+    : path.join(__dirname, '..', 'session', 'fedora-tv-os-system-settings');
+  if (fs.existsSync(installed)) return installed;
+  if (fs.existsSync(bundled)) return bundled;
+  return null;
+}
+
+function validatePowerSettings(candidate = {}) {
+  const idleTimeout = [0, 5, 10, 20, 30, 60, 120].includes(Number(candidate.idleTimeout)) ? Number(candidate.idleTimeout) : 0;
+  const powerActions = ['ask', 'poweroff', 'suspend', 'ignore'];
+  const lidActions = ['suspend', 'poweroff', 'ignore'];
+  return {
+    idleTimeout,
+    powerButtonAction: powerActions.includes(candidate.powerButtonAction) ? candidate.powerButtonAction : POWER_DEFAULTS.powerButtonAction,
+    lidAction: lidActions.includes(candidate.lidAction) ? candidate.lidAction : POWER_DEFAULTS.lidAction,
+    lidExternalAction: lidActions.includes(candidate.lidExternalAction) ? candidate.lidExternalAction : POWER_DEFAULTS.lidExternalAction,
+    lidDockedAction: lidActions.includes(candidate.lidDockedAction) ? candidate.lidDockedAction : POWER_DEFAULTS.lidDockedAction
+  };
+}
+
+async function setPowerSettings(candidate) {
+  const power = validatePowerSettings(candidate);
+  const helper = powerHelperPath();
+  if (!helper) return { ok: false, message: 'Системный helper не установлен. Соберите и установите новый RPM.' };
+  const agentReady = await ensurePolicyKitAgent();
+  if (!agentReady) return { ok: false, message: 'Не найден агент PolicyKit для подтверждения системных настроек.' };
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setKiosk(false);
+    mainWindow.setFullScreen(false);
+    mainWindow.show();
+    mainWindow.focus();
+  }
+  const pkexecPath = fs.existsSync('/usr/bin/pkexec') ? '/usr/bin/pkexec' : 'pkexec';
+  const result = await runSystemCommand(pkexecPath, [
+    helper, 'power', power.powerButtonAction, power.lidAction, power.lidExternalAction, power.lidDockedAction
+  ], { timeout: 120000, env: SYSTEM_COMMAND_ENV });
+  restoreKioskWindow();
+  if (!result.ok) {
+    const canceled = /dismissed|cancel|not authorized|authentication.*failed/i.test(result.message);
+    return { ok: false, message: canceled ? 'Изменение настроек отменено.' : `Не удалось изменить настройки питания: ${result.message}` };
+  }
+  writeSettings({ power });
+  return { ok: true, power };
+}
+
 ipcMain.handle('settings:get', async () => {
   const preferences = readSettings();
-  const [audio, wifi] = await Promise.all([getAudioState(), getWifiState(false)]);
-  return { ok: true, preferences, audio, wifi };
+  const [audio, wifi, displays] = await Promise.all([getAudioState(), getWifiState(false), getDisplayState()]);
+  return { ok: true, preferences, audio, wifi, displays, power: { ok: true, ...preferences.power } };
 });
 ipcMain.handle('settings:get-preferences', () => readSettings());
 ipcMain.handle('audio:set-volume', async (_event, volume) => {
@@ -1040,20 +1330,16 @@ ipcMain.handle('audio:toggle-mute', async () => {
   const result = await runSystemCommand('wpctl', ['set-mute', '@DEFAULT_AUDIO_SINK@', 'toggle']);
   return result.ok ? getAudioState() : result;
 });
+ipcMain.handle('audio:select-output', (_event, id) => selectAudioOutput(id));
+ipcMain.handle('display:get', () => getDisplayState());
+ipcMain.handle('display:apply', (_event, candidate) => applyDisplaySettings(candidate));
+ipcMain.handle('power:set', (_event, candidate) => setPowerSettings(candidate));
 ipcMain.handle('wifi:scan', () => getWifiState(true));
 ipcMain.handle('wifi:toggle', async (_event, enabled) => {
   const result = await runSystemCommand('nmcli', ['radio', 'wifi', enabled ? 'on' : 'off']);
   return result.ok ? getWifiState(Boolean(enabled)) : result;
 });
-ipcMain.handle('wifi:connect', async (_event, candidate) => {
-  const ssid = String(candidate?.ssid || '').slice(0, 128);
-  const password = String(candidate?.password || '').slice(0, 256);
-  if (!ssid) return { ok: false, message: 'Сеть не выбрана' };
-  const args = ['device', 'wifi', 'connect', ssid];
-  if (password) args.push('password', password);
-  const result = await runSystemCommand('nmcli', args);
-  return result.ok ? getWifiState(false) : result;
-});
+ipcMain.handle('wifi:connect', (_event, candidate) => connectWifi(candidate));
 ipcMain.handle('language:set', (_event, language) => writeSettings({ language: language === 'en' ? 'en' : 'ru' }));
 ipcMain.on('external:home', showLauncher);
 

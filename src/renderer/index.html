@@ -122,6 +122,7 @@
 
     <footer class="footer-actions" data-nav-zone="system" data-nav-order="2">
       <button class="footer-button focusable" data-action="logout"><span>⇥</span><b data-i18n="logout">Сменить пользователя</b></button>
+      <button class="footer-button focusable" data-action="suspend"><span>◐</span><b data-i18n="sleep">Сон</b></button>
       <button class="footer-button focusable" data-action="reboot"><span>↻</span><b data-i18n="reboot">Перезагрузка</b></button>
       <button class="footer-button focusable danger" data-action="poweroff"><span>⏻</span><b data-i18n="poweroff">Выключение</b></button>
     </footer>
@@ -207,11 +208,43 @@
           <button class="dialog-button focusable" id="update-install" hidden>Перезапустить и обновить</button>
         </div>
       </section>
-      <section class="settings-section" data-nav-zone="settings-sound" data-nav-order="2">
+      <section class="settings-section" data-nav-zone="settings-display" data-nav-order="2">
+        <div class="settings-heading">
+          <div><p class="eyebrow" data-i18n="displayGroup">Изображение</p><h3 data-i18n="displayTitle">Дисплеи</h3></div>
+          <span class="version-badge" id="display-status">—</span>
+        </div>
+        <p class="panel-description" id="display-description" data-i18n="displayDescription">Выберите экран и настройте его видеорежим. Изменения сохраняются для следующих запусков TV-сессии.</p>
+        <div class="system-settings-grid">
+          <label class="system-field"><span data-i18n="displayOutput">Дисплей</span><select class="focusable" id="display-output"></select></label>
+          <label class="system-field"><span data-i18n="displayMode">Разрешение и частота</span><select class="focusable" id="display-mode"></select></label>
+          <label class="system-field"><span data-i18n="displayScale">Масштаб</span><select class="focusable" id="display-scale">
+            <option value="1">100%</option><option value="1.25">125%</option><option value="1.5">150%</option><option value="1.75">175%</option><option value="2">200%</option>
+          </select></label>
+          <label class="system-field"><span data-i18n="displayRotation">Поворот</span><select class="focusable" id="display-transform">
+            <option value="normal" data-i18n="rotationNormal">Обычный</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option>
+          </select></label>
+          <label class="system-field"><span data-i18n="displayPositionX">Позиция X</span><input class="focusable" id="display-x" type="number" min="-32768" max="32768" step="1" value="0"></label>
+          <label class="system-field"><span data-i18n="displayPositionY">Позиция Y</span><input class="focusable" id="display-y" type="number" min="-32768" max="32768" step="1" value="0"></label>
+        </div>
+        <div class="setting-switch-row">
+          <div><strong data-i18n="displayEnabled">Использовать дисплей</strong><span data-i18n="displayEnabledHint">Единственный активный экран отключить нельзя.</span></div>
+          <button class="switch focusable" id="display-enabled" type="button" role="switch" aria-checked="true"><span></span></button>
+        </div>
+        <div class="setting-switch-row" id="display-adaptive-row" hidden>
+          <div><strong data-i18n="adaptiveSync">Адаптивная частота</strong><span data-i18n="adaptiveSyncHint">Использовать VRR, если дисплей и видеодрайвер поддерживают его.</span></div>
+          <button class="switch focusable" id="display-adaptive" type="button" role="switch" aria-checked="false"><span></span></button>
+        </div>
+        <div class="update-actions settings-actions">
+          <button class="dialog-button focusable" id="display-apply" data-i18n="apply">Применить</button>
+          <button class="dialog-button secondary focusable" id="display-refresh" data-i18n="refreshDevices">Обновить устройства</button>
+        </div>
+      </section>
+      <section class="settings-section" data-nav-zone="settings-sound" data-nav-order="3">
         <div class="settings-heading">
           <div><p class="eyebrow" data-i18n="soundGroup">Звук</p><h3 data-i18n="soundTitle">Громкость</h3></div>
           <span class="version-badge" id="volume-value">—</span>
         </div>
+        <label class="system-field sound-output-field"><span data-i18n="audioOutput">Устройство вывода</span><select class="focusable" id="audio-output"></select></label>
         <div class="range-control">
           <span aria-hidden="true">🔈</span>
           <input class="focusable" id="volume-slider" type="range" min="0" max="100" step="5" value="50" aria-label="Громкость">
@@ -219,7 +252,7 @@
           <button class="dialog-button secondary focusable" id="mute-toggle" data-i18n="mute">Выключить звук</button>
         </div>
       </section>
-      <section class="settings-section" data-nav-zone="settings-wifi" data-nav-order="3">
+      <section class="settings-section" data-nav-zone="settings-wifi" data-nav-order="4">
         <div class="settings-heading">
           <div><p class="eyebrow">Wi‑Fi</p><h3 data-i18n="networkTitle">Беспроводная сеть</h3></div>
           <button class="switch focusable" id="wifi-toggle" role="switch" aria-checked="false"><span></span></button>
@@ -232,19 +265,41 @@
           <button class="dialog-button secondary focusable" type="button" id="wifi-password-cancel" data-i18n="cancel">Отмена</button>
         </form>
       </section>
-      <section class="settings-section" data-nav-zone="settings-language" data-nav-order="4">
+      <section class="settings-section" data-nav-zone="settings-power" data-nav-order="5">
+        <div class="settings-heading"><div><p class="eyebrow" data-i18n="powerGroup">Питание</p><h3 data-i18n="powerTitle">Сон, крышка и кнопки</h3></div></div>
+        <p class="panel-description" data-i18n="powerDescription">Таймер сна действует в TV-сессии. Крышка и физическая кнопка питания настраиваются для всего устройства после системного подтверждения.</p>
+        <div class="system-settings-grid power-grid">
+          <label class="system-field"><span data-i18n="sleepAfter">Переходить в сон</span><select class="focusable" id="power-idle-timeout">
+            <option value="0" data-i18n="never">Никогда</option><option value="5">5 мин</option><option value="10">10 мин</option><option value="20">20 мин</option><option value="30">30 мин</option><option value="60">1 ч</option><option value="120">2 ч</option>
+          </select></label>
+          <label class="system-field"><span data-i18n="powerButton">Кнопка питания</span><select class="focusable" id="power-button-action">
+            <option value="ask" data-i18n="askBeforePoweroff">Показать подтверждение</option><option value="poweroff" data-i18n="poweroffNow">Выключить</option><option value="suspend" data-i18n="sleep">Сон</option><option value="ignore" data-i18n="doNothing">Ничего не делать</option>
+          </select></label>
+          <label class="system-field"><span data-i18n="lidBattery">Закрытие крышки</span><select class="focusable" id="power-lid-action">
+            <option value="suspend" data-i18n="sleep">Сон</option><option value="poweroff" data-i18n="poweroffNow">Выключить</option><option value="ignore" data-i18n="doNothing">Ничего не делать</option>
+          </select></label>
+          <label class="system-field"><span data-i18n="lidExternalPower">Крышка при питании от сети</span><select class="focusable" id="power-lid-external-action">
+            <option value="suspend" data-i18n="sleep">Сон</option><option value="poweroff" data-i18n="poweroffNow">Выключить</option><option value="ignore" data-i18n="doNothing">Ничего не делать</option>
+          </select></label>
+          <label class="system-field"><span data-i18n="lidDocked">Крышка с внешним дисплеем</span><select class="focusable" id="power-lid-docked-action">
+            <option value="ignore" data-i18n="doNothing">Ничего не делать</option><option value="suspend" data-i18n="sleep">Сон</option><option value="poweroff" data-i18n="poweroffNow">Выключить</option>
+          </select></label>
+        </div>
+        <div class="update-actions settings-actions"><button class="dialog-button focusable" id="power-apply" data-i18n="applyPower">Сохранить настройки питания</button></div>
+      </section>
+      <section class="settings-section" data-nav-zone="settings-language" data-nav-order="6">
         <div class="settings-heading"><div><p class="eyebrow" data-i18n="languageGroup">Язык</p><h3 data-i18n="languageTitle">Язык интерфейса</h3></div></div>
         <div class="language-options" role="radiogroup">
           <button class="language-button focusable selected" data-language="ru">Русский</button>
           <button class="language-button focusable" data-language="en">English</button>
         </div>
       </section>
-      <section class="settings-section" data-nav-zone="settings-keyboard" data-nav-order="5">
+      <section class="settings-section" data-nav-zone="settings-keyboard" data-nav-order="7">
         <div class="settings-heading"><div><p class="eyebrow" data-i18n="inputGroup">Ввод</p><h3 data-i18n="keyboardTitle">Экранная клавиатура</h3></div></div>
         <p class="panel-description" data-i18n="keyboardDescription">Открывается автоматически в полях ввода. Её также можно включить кнопкой ⌨ в верхней панели.</p>
         <button class="dialog-button secondary focusable" id="settings-keyboard-toggle" data-i18n="openKeyboard">Открыть клавиатуру</button>
       </section>
-      <section class="settings-section background-section" data-nav-zone="settings-background" data-nav-order="6">
+      <section class="settings-section background-section" data-nav-zone="settings-background" data-nav-order="8">
         <div class="settings-heading">
           <div><p class="eyebrow" data-i18n="appearanceGroup">Оформление</p><h3 data-i18n="backgroundTitle">Фоновое изображение</h3></div>
         </div>
@@ -259,12 +314,12 @@
           </div>
         </div>
       </section>
-      <section class="settings-section" data-nav-zone="settings-apps" data-nav-order="7">
+      <section class="settings-section" data-nav-zone="settings-apps" data-nav-order="9">
         <div class="settings-heading"><div><p class="eyebrow" data-i18n="apps">Приложения</p><h3 data-i18n="myApps">Мои приложения</h3></div></div>
         <p class="panel-description">Здесь можно удалить добавленные вами сайты и системные приложения. Встроенные плитки защищены.</p>
         <div class="manage-list" id="manage-list"></div>
       </section>
-      <div class="panel-actions" data-nav-zone="settings-done" data-nav-order="8"><button class="dialog-button focusable" data-manage-close data-i18n="done">Готово</button></div>
+      <div class="panel-actions" data-nav-zone="settings-done" data-nav-order="10"><button class="dialog-button focusable" data-manage-close data-i18n="done">Готово</button></div>
     </section>
   </div>
 

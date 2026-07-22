@@ -1,0 +1,59 @@
+#!/usr/bin/bash
+set -euo pipefail
+
+if [[ ${EUID} -ne 0 ]]; then
+  printf 'Эта команда должна запускаться через pkexec.\n' >&2
+  exit 77
+fi
+
+if [[ ${1:-} != power || $# -ne 5 ]]; then
+  printf 'Недопустимая команда системных настроек.\n' >&2
+  exit 64
+fi
+
+POWER_ACTION=$2
+LID_ACTION=$3
+LID_EXTERNAL_ACTION=$4
+LID_DOCKED_ACTION=$5
+
+case "$POWER_ACTION" in
+  ask|poweroff|suspend|ignore) ;;
+  *) printf 'Недопустимое действие кнопки питания.\n' >&2; exit 64 ;;
+esac
+
+for ACTION in "$LID_ACTION" "$LID_EXTERNAL_ACTION" "$LID_DOCKED_ACTION"; do
+  case "$ACTION" in
+    suspend|poweroff|ignore) ;;
+    *) printf 'Недопустимое действие крышки.\n' >&2; exit 64 ;;
+  esac
+done
+
+# В режиме ask обработку короткого нажатия берёт на себя labwc: оболочка
+# показывает собственное подтверждение вместо немедленного выключения.
+LOGIND_POWER_ACTION=$POWER_ACTION
+if [[ $POWER_ACTION == ask ]]; then
+  LOGIND_POWER_ACTION=ignore
+fi
+
+CONFIG_DIR=/etc/systemd/logind.conf.d
+CONFIG_PATH="$CONFIG_DIR/90-fedora-tv-os.conf"
+TEMP_PATH=$(mktemp /tmp/fedora-tv-logind.XXXXXX)
+trap 'rm -f "$TEMP_PATH"' EXIT
+
+{
+  printf '[Login]\n'
+  printf 'HandlePowerKey=%s\n' "$LOGIND_POWER_ACTION"
+  printf 'HandleLidSwitch=%s\n' "$LID_ACTION"
+  printf 'HandleLidSwitchExternalPower=%s\n' "$LID_EXTERNAL_ACTION"
+  printf 'HandleLidSwitchDocked=%s\n' "$LID_DOCKED_ACTION"
+} > "$TEMP_PATH"
+
+install -d -m 0755 "$CONFIG_DIR"
+install -m 0644 "$TEMP_PATH" "$CONFIG_PATH"
+
+# SIGHUP перечитывает logind.conf без перезапуска пользовательских сессий.
+if ! systemctl reload systemd-logind.service; then
+  systemctl kill --kill-whom=main --signal=HUP systemd-logind.service
+fi
+
+printf 'Настройки питания применены.\n'

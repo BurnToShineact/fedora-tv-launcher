@@ -1,6 +1,6 @@
 {
   "name": "fedora-tv-os",
-  "version": "2.5.1",
+  "version": "2.6.0",
   "description": "Отдельная телевизионная Wayland-сессия для Fedora",
   "homepage": "https://github.com/BurnToShineact/fedora-tv-launcher",
   "repository": {
@@ -82,7 +82,10 @@
         "labwc",
         "polkit",
         "lxqt-policykit",
-        "wlrctl"
+        "wlrctl",
+        "wlr-randr",
+        "wireplumber",
+        "NetworkManager"
       ],
       "packageCategory": "System"
     },

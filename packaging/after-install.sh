@@ -27,6 +27,7 @@ install -Dm755 "$SESSION_SOURCE/fedora-tv-os-session" /usr/libexec/fedora-tv-os-
 install -Dm755 "$SESSION_SOURCE/fedora-tv-os-startup" /usr/libexec/fedora-tv-os-startup
 install -Dm755 "$SESSION_SOURCE/fedora-tv-os-home" /usr/libexec/fedora-tv-os-home
 install -Dm755 "$SESSION_SOURCE/fedora-tv-os-logout" /usr/libexec/fedora-tv-os-logout
+install -Dm755 "$SESSION_SOURCE/fedora-tv-os-system-settings" /usr/libexec/fedora-tv-os-system-settings
 install -Dm644 "$SESSION_SOURCE/fedora-tv-os.desktop" /usr/share/wayland-sessions/fedora-tv-os.desktop
 install -Dm644 "$SESSION_SOURCE/labwc/rc.xml" /etc/fedora-tv-os/labwc/rc.xml
 install -Dm644 "$SESSION_SOURCE/labwc/environment" /etc/fedora-tv-os/labwc/environment
@@ -35,7 +36,7 @@ install -Dm644 "$SESSION_SOURCE/labwc/themerc-override" /etc/fedora-tv-os/labwc/
 
 if command -v restorecon >/dev/null 2>&1; then
   restorecon -RF /usr/libexec/fedora-tv-os-session /usr/libexec/fedora-tv-os-startup /usr/libexec/fedora-tv-os-home \
-    /usr/libexec/fedora-tv-os-logout /usr/share/wayland-sessions/fedora-tv-os.desktop \
+    /usr/libexec/fedora-tv-os-logout /usr/libexec/fedora-tv-os-system-settings /usr/share/wayland-sessions/fedora-tv-os.desktop \
     /etc/fedora-tv-os || true
 fi
 

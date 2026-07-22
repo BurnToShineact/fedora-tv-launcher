@@ -86,6 +86,26 @@ const keyboardMode = document.getElementById('keyboard-mode');
 const volumeSlider = document.getElementById('volume-slider');
 const volumeValue = document.getElementById('volume-value');
 const muteToggle = document.getElementById('mute-toggle');
+const audioOutput = document.getElementById('audio-output');
+const displayStatus = document.getElementById('display-status');
+const displayDescription = document.getElementById('display-description');
+const displayOutput = document.getElementById('display-output');
+const displayMode = document.getElementById('display-mode');
+const displayScale = document.getElementById('display-scale');
+const displayTransform = document.getElementById('display-transform');
+const displayX = document.getElementById('display-x');
+const displayY = document.getElementById('display-y');
+const displayEnabled = document.getElementById('display-enabled');
+const displayAdaptiveRow = document.getElementById('display-adaptive-row');
+const displayAdaptive = document.getElementById('display-adaptive');
+const displayApply = document.getElementById('display-apply');
+const displayRefresh = document.getElementById('display-refresh');
+const powerIdleTimeout = document.getElementById('power-idle-timeout');
+const powerButtonAction = document.getElementById('power-button-action');
+const powerLidAction = document.getElementById('power-lid-action');
+const powerLidExternalAction = document.getElementById('power-lid-external-action');
+const powerLidDockedAction = document.getElementById('power-lid-docked-action');
+const powerApply = document.getElementById('power-apply');
 const wifiToggle = document.getElementById('wifi-toggle');
 const wifiScan = document.getElementById('wifi-scan');
 const wifiList = document.getElementById('wifi-list');
@@ -112,15 +132,16 @@ let quickSelectedNetwork = null;
 let lastTextInput = null;
 let latestAudioState = null;
 let latestWifiState = null;
+let latestDisplayState = null;
 const rememberedFocus = new WeakMap();
 const overlayReturnFocus = new WeakMap();
 
 const translations = {
   ru: {
-    soundGroup: 'Звук', soundTitle: 'Громкость', mute: 'Выключить звук', unmute: 'Включить звук', networkTitle: 'Беспроводная сеть', scan: 'Обновить список', connect: 'Подключиться', cancel: 'Отмена', languageGroup: 'Язык', languageTitle: 'Язык интерфейса', inputGroup: 'Ввод', keyboardTitle: 'Экранная клавиатура', keyboardDescription: 'Открывается автоматически в полях ввода. Её также можно включить кнопкой ⌨ в верхней панели.', openKeyboard: 'Открыть клавиатуру', noNetworks: 'Сети Wi‑Fi не найдены.', wifiOff: 'Wi‑Fi выключен', connected: 'Подключено', secured: 'Защищённая сеть', open: 'Открытая сеть', signal: 'Сигнал', password: 'Пароль для', apps: 'Приложения', settings: 'Настройки', webApp: 'Веб-приложение', systemApp: 'Системное · Home для возврата', settingsKind: 'Настройки оболочки', addApp: 'Добавить приложение', addKind: 'Сайт или приложение из системы', brandSubtitle: 'Отдельная TV-сессия', logout: 'Сменить пользователя', reboot: 'Перезагрузка', poweroff: 'Выключение', newTile: 'Новая плитка', website: 'Веб-сайт', fromSystem: 'Из системы', systemGroup: 'Система', updateTitle: 'Обновление Fedora TV OS', checkUpdates: 'Проверить обновления', appearanceGroup: 'Оформление', backgroundTitle: 'Фоновое изображение', chooseImage: 'Выбрать изображение', resetBackground: 'Сбросить фон', myApps: 'Мои приложения', done: 'Готово'
+    soundGroup: 'Звук', soundTitle: 'Громкость', mute: 'Выключить звук', unmute: 'Включить звук', networkTitle: 'Беспроводная сеть', scan: 'Обновить список', connect: 'Подключиться', cancel: 'Отмена', languageGroup: 'Язык', languageTitle: 'Язык интерфейса', inputGroup: 'Ввод', keyboardTitle: 'Экранная клавиатура', keyboardDescription: 'Открывается автоматически в полях ввода. Её также можно включить кнопкой ⌨ в верхней панели.', openKeyboard: 'Открыть клавиатуру', noNetworks: 'Сети Wi‑Fi не найдены.', wifiOff: 'Wi‑Fi выключен', connected: 'Подключено', secured: 'Защищённая сеть', savedNetwork: 'Сохранённая сеть', open: 'Открытая сеть', signal: 'Сигнал', password: 'Пароль для', apps: 'Приложения', settings: 'Настройки', webApp: 'Веб-приложение', systemApp: 'Системное · Home для возврата', settingsKind: 'Настройки оболочки', addApp: 'Добавить приложение', addKind: 'Сайт или приложение из системы', brandSubtitle: 'Отдельная TV-сессия', logout: 'Сменить пользователя', reboot: 'Перезагрузка', poweroff: 'Выключение', newTile: 'Новая плитка', website: 'Веб-сайт', fromSystem: 'Из системы', systemGroup: 'Система', updateTitle: 'Обновление Fedora TV OS', checkUpdates: 'Проверить обновления', appearanceGroup: 'Оформление', backgroundTitle: 'Фоновое изображение', chooseImage: 'Выбрать изображение', resetBackground: 'Сбросить фон', myApps: 'Мои приложения', done: 'Готово', displayGroup: 'Изображение', displayTitle: 'Дисплеи', displayDescription: 'Выберите экран и настройте его видеорежим. Изменения сохраняются для следующих запусков TV-сессии.', displayOutput: 'Дисплей', displayMode: 'Разрешение и частота', displayScale: 'Масштаб', displayRotation: 'Поворот', displayPositionX: 'Позиция X', displayPositionY: 'Позиция Y', displayEnabled: 'Использовать дисплей', displayEnabledHint: 'Единственный активный экран отключить нельзя.', adaptiveSync: 'Адаптивная частота', adaptiveSyncHint: 'Использовать VRR, если дисплей и видеодрайвер поддерживают его.', rotationNormal: 'Обычный', apply: 'Применить', refreshDevices: 'Обновить устройства', audioOutput: 'Устройство вывода', powerGroup: 'Питание', powerTitle: 'Сон, крышка и кнопки', powerDescription: 'Таймер сна действует в TV-сессии. Крышка и физическая кнопка питания настраиваются для всего устройства после системного подтверждения.', sleepAfter: 'Переходить в сон', never: 'Никогда', powerButton: 'Кнопка питания', askBeforePoweroff: 'Показать подтверждение', poweroffNow: 'Выключить', sleep: 'Сон', doNothing: 'Ничего не делать', lidBattery: 'Закрытие крышки', lidExternalPower: 'Крышка при питании от сети', lidDocked: 'Крышка с внешним дисплеем', applyPower: 'Сохранить настройки питания'
   },
   en: {
-    soundGroup: 'Sound', soundTitle: 'Volume', mute: 'Mute', unmute: 'Unmute', networkTitle: 'Wireless network', scan: 'Refresh list', connect: 'Connect', cancel: 'Cancel', languageGroup: 'Language', languageTitle: 'Interface language', inputGroup: 'Input', keyboardTitle: 'On-screen keyboard', keyboardDescription: 'Opens automatically for text fields. You can also use the ⌨ button in the top bar.', openKeyboard: 'Open keyboard', noNetworks: 'No Wi-Fi networks found.', wifiOff: 'Wi-Fi is off', connected: 'Connected', secured: 'Secured network', open: 'Open network', signal: 'Signal', password: 'Password for', apps: 'Apps', settings: 'Settings', webApp: 'Web app', systemApp: 'System app · Home to return', settingsKind: 'Shell settings', addApp: 'Add app', addKind: 'Website or system app', brandSubtitle: 'Dedicated TV session', logout: 'Switch user', reboot: 'Restart', poweroff: 'Power off', newTile: 'New tile', website: 'Website', fromSystem: 'From system', systemGroup: 'System', updateTitle: 'Fedora TV OS update', checkUpdates: 'Check for updates', appearanceGroup: 'Appearance', backgroundTitle: 'Background image', chooseImage: 'Choose image', resetBackground: 'Reset background', myApps: 'My apps', done: 'Done'
+    soundGroup: 'Sound', soundTitle: 'Volume', mute: 'Mute', unmute: 'Unmute', networkTitle: 'Wireless network', scan: 'Refresh list', connect: 'Connect', cancel: 'Cancel', languageGroup: 'Language', languageTitle: 'Interface language', inputGroup: 'Input', keyboardTitle: 'On-screen keyboard', keyboardDescription: 'Opens automatically for text fields. You can also use the ⌨ button in the top bar.', openKeyboard: 'Open keyboard', noNetworks: 'No Wi-Fi networks found.', wifiOff: 'Wi-Fi is off', connected: 'Connected', secured: 'Secured network', savedNetwork: 'Saved network', open: 'Open network', signal: 'Signal', password: 'Password for', apps: 'Apps', settings: 'Settings', webApp: 'Web app', systemApp: 'System app · Home to return', settingsKind: 'Shell settings', addApp: 'Add app', addKind: 'Website or system app', brandSubtitle: 'Dedicated TV session', logout: 'Switch user', reboot: 'Restart', poweroff: 'Power off', newTile: 'New tile', website: 'Website', fromSystem: 'From system', systemGroup: 'System', updateTitle: 'Fedora TV OS update', checkUpdates: 'Check for updates', appearanceGroup: 'Appearance', backgroundTitle: 'Background image', chooseImage: 'Choose image', resetBackground: 'Reset background', myApps: 'My apps', done: 'Done', displayGroup: 'Picture', displayTitle: 'Displays', displayDescription: 'Choose a screen and configure its video mode. Changes are saved for future TV sessions.', displayOutput: 'Display', displayMode: 'Resolution and refresh rate', displayScale: 'Scale', displayRotation: 'Rotation', displayPositionX: 'Position X', displayPositionY: 'Position Y', displayEnabled: 'Use this display', displayEnabledHint: 'The only active display cannot be disabled.', adaptiveSync: 'Adaptive refresh rate', adaptiveSyncHint: 'Use VRR when supported by the display and video driver.', rotationNormal: 'Normal', apply: 'Apply', refreshDevices: 'Refresh devices', audioOutput: 'Output device', powerGroup: 'Power', powerTitle: 'Sleep, lid and buttons', powerDescription: 'The sleep timer applies to the TV session. Lid and physical power button settings apply to the whole device after system confirmation.', sleepAfter: 'Go to sleep after', never: 'Never', powerButton: 'Power button', askBeforePoweroff: 'Ask before powering off', poweroffNow: 'Power off', sleep: 'Sleep', doNothing: 'Do nothing', lidBattery: 'Close lid', lidExternalPower: 'Close lid on AC power', lidDocked: 'Close lid with external display', applyPower: 'Save power settings'
   }
 };
 
@@ -141,10 +162,18 @@ function applyLanguage(language) {
     : '<span><kbd>← ↑ ↓ →</kbd><b>Выбор</b></span><span><kbd>OK</kbd><b>Открыть</b></span><span><kbd>Home</kbd><b>Домой</b></span>';
   document.querySelector('.section-title h2').textContent = t('apps');
   document.getElementById('manage-title').textContent = t('settings');
+  const idleLabels = english
+    ? { 5: '5 min', 10: '10 min', 20: '20 min', 30: '30 min', 60: '1 hr', 120: '2 hr' }
+    : { 5: '5 мин', 10: '10 мин', 20: '20 мин', 30: '30 мин', 60: '1 ч', 120: '2 ч' };
+  for (const [value, label] of Object.entries(idleLabels)) {
+    const option = powerIdleTimeout.querySelector(`option[value="${value}"]`);
+    if (option) option.textContent = label;
+  }
   if (!quickPanel.hidden) updateQuickPanelHeading(quickPanel.dataset.section);
   renderKeyboard();
   if (latestAudioState) renderAudio(latestAudioState);
   if (latestWifiState) renderWifi(latestWifiState);
+  if (latestDisplayState) renderDisplays(latestDisplayState);
   updateClock();
 }
 
@@ -556,7 +585,14 @@ function closeQuickPanel() {
 }
 
 function renderAudio(state = {}) {
-  if (!state.ok) return;
+  if (!state.ok) {
+    audioOutput.replaceChildren();
+    const option = document.createElement('option');
+    option.textContent = currentLanguage === 'en' ? 'Audio service unavailable' : 'Служба звука недоступна';
+    audioOutput.appendChild(option);
+    audioOutput.disabled = true;
+    return;
+  }
   latestAudioState = state;
   volumeSlider.value = state.volume;
   volumeValue.textContent = `${state.volume}%`;
@@ -571,6 +607,105 @@ function renderAudio(state = {}) {
   topbarVolumeIcon.innerHTML = volumeIconMarkup(state.volume, Boolean(state.muted));
   topbarVolume.querySelector('b').textContent = state.muted ? (currentLanguage === 'en' ? 'Muted' : 'Без звука') : `${state.volume}%`;
   topbarVolume.classList.toggle('inactive', Boolean(state.muted));
+  const selectedOutput = audioOutput.value;
+  audioOutput.replaceChildren();
+  for (const output of state.outputs || []) {
+    const option = document.createElement('option');
+    option.value = String(output.id);
+    option.textContent = output.name;
+    option.selected = output.default || (!state.outputs.some((item) => item.default) && option.value === selectedOutput);
+    audioOutput.appendChild(option);
+  }
+  if (!audioOutput.options.length) {
+    const option = document.createElement('option');
+    option.textContent = currentLanguage === 'en' ? 'No output devices' : 'Устройства вывода не найдены';
+    audioOutput.appendChild(option);
+  }
+  audioOutput.disabled = (state.outputs || []).length < 2;
+}
+
+function displayModeLabel(mode) {
+  const refresh = Number(mode.refresh || 0).toLocaleString(currentLanguage === 'en' ? 'en-US' : 'ru-RU', { maximumFractionDigits: 2 });
+  const suffix = mode.current
+    ? (currentLanguage === 'en' ? ' · current' : ' · текущий')
+    : mode.preferred
+      ? (currentLanguage === 'en' ? ' · recommended' : ' · рекомендуемый')
+      : '';
+  return `${mode.width}×${mode.height} · ${refresh} Hz${suffix}`;
+}
+
+function selectedDisplay() {
+  return latestDisplayState?.outputs?.find((output) => output.name === displayOutput.value) || null;
+}
+
+function renderSelectedDisplay() {
+  const output = selectedDisplay();
+  const controls = [displayMode, displayScale, displayTransform, displayX, displayY, displayEnabled, displayAdaptive, displayApply];
+  for (const control of controls) control.disabled = !output;
+  if (!output) return;
+  displayDescription.textContent = output.description || output.name;
+  displayStatus.textContent = output.enabled ? (currentLanguage === 'en' ? 'Active' : 'Активен') : (currentLanguage === 'en' ? 'Disabled' : 'Выключен');
+  displayMode.replaceChildren();
+  for (const mode of output.modes) {
+    const option = document.createElement('option');
+    option.value = mode.id;
+    option.textContent = displayModeLabel(mode);
+    option.selected = mode.current || (!output.modes.some((item) => item.current) && mode.preferred);
+    displayMode.appendChild(option);
+  }
+  const scaleValue = String(Number(output.scale || 1));
+  if (![...displayScale.options].some((option) => option.value === scaleValue)) {
+    const option = document.createElement('option');
+    option.value = scaleValue;
+    option.textContent = `${Math.round(Number(scaleValue) * 100)}%`;
+    displayScale.appendChild(option);
+  }
+  displayScale.value = scaleValue;
+  if (![...displayTransform.options].some((option) => option.value === output.transform)) {
+    const option = document.createElement('option');
+    option.value = output.transform;
+    option.textContent = output.transform;
+    displayTransform.appendChild(option);
+  }
+  displayTransform.value = output.transform;
+  displayX.value = output.x;
+  displayY.value = output.y;
+  displayEnabled.setAttribute('aria-checked', String(Boolean(output.enabled)));
+  displayAdaptiveRow.hidden = output.adaptiveSync == null;
+  displayAdaptive.setAttribute('aria-checked', String(Boolean(output.adaptiveSync)));
+}
+
+function renderDisplays(state = {}) {
+  latestDisplayState = state;
+  const previous = displayOutput.value;
+  displayOutput.replaceChildren();
+  if (!state.ok || !state.outputs?.length) {
+    const option = document.createElement('option');
+    option.textContent = currentLanguage === 'en' ? 'Displays unavailable' : 'Дисплеи недоступны';
+    displayOutput.appendChild(option);
+    displayOutput.disabled = true;
+    displayStatus.textContent = currentLanguage === 'en' ? 'Unavailable' : 'Недоступно';
+    displayDescription.textContent = state.message || t('displayDescription');
+    renderSelectedDisplay();
+    return;
+  }
+  for (const output of state.outputs) {
+    const option = document.createElement('option');
+    option.value = output.name;
+    option.textContent = `${output.name} · ${output.description || output.name}`;
+    displayOutput.appendChild(option);
+  }
+  displayOutput.disabled = false;
+  displayOutput.value = state.outputs.some((output) => output.name === previous) ? previous : state.outputs[0].name;
+  renderSelectedDisplay();
+}
+
+function renderPower(power = {}) {
+  powerIdleTimeout.value = String(power.idleTimeout ?? 0);
+  powerButtonAction.value = power.powerButtonAction || 'ask';
+  powerLidAction.value = power.lidAction || 'suspend';
+  powerLidExternalAction.value = power.lidExternalAction || 'suspend';
+  powerLidDockedAction.value = power.lidDockedAction || 'ignore';
 }
 
 function volumeIconMarkup(volume = 0, muted = false) {
@@ -642,7 +777,11 @@ function renderWifiNetworks(container, state, source) {
     button.className = `wifi-network focusable${network.active ? ' active' : ''}`;
     button.innerHTML = '<span><strong></strong><span class="wifi-detail"></span></span><span class="wifi-signal"></span>';
     button.querySelector('strong').textContent = network.ssid;
-    button.querySelector('.wifi-detail').textContent = network.active ? t('connected') : (network.secure ? t('secured') : t('open'));
+    button.querySelector('.wifi-detail').textContent = network.active
+      ? t('connected')
+      : network.saved
+        ? t('savedNetwork')
+        : (network.secure ? t('secured') : t('open'));
     renderWifiSignal(button.querySelector('.wifi-signal'), network.signal);
     button.addEventListener('click', () => selectNetwork(network, source));
     container.appendChild(button);
@@ -658,11 +797,14 @@ function renderWifiEmptyState(container, message) {
 
 async function selectNetwork(network, source = 'settings') {
   if (network.active) return showToast(t('connected'));
-  if (!network.secure) {
-    const result = await window.tv.connectWifi({ ssid: network.ssid, password: '' });
-    if (!result?.ok) return showToast(result?.message || 'Wi‑Fi error');
-    renderWifi(result);
-    return showToast(currentLanguage === 'en' ? 'Connected' : 'Подключено');
+  if (network.saved || !network.secure) {
+    const result = await window.tv.connectWifi({ ssid: network.ssid, uuid: network.uuid, password: '' });
+    if (result?.ok) {
+      renderWifi(result);
+      return showToast(currentLanguage === 'en' ? 'Connected' : 'Подключено');
+    }
+    if (!network.secure || !result?.needsPassword) return showToast(result?.message || 'Wi‑Fi error');
+    showToast(currentLanguage === 'en' ? 'Enter the updated Wi-Fi password' : 'Введите новый пароль Wi‑Fi');
   }
   const quick = source === 'quick';
   if (quick) quickSelectedNetwork = network;
@@ -682,6 +824,8 @@ async function loadSystemSettings() {
   applyLanguage(result.preferences?.language);
   renderAudio(result.audio);
   renderWifi(result.wifi);
+  renderDisplays(result.displays);
+  renderPower(result.power || result.preferences?.power);
 }
 
 function renderKeyboard(preferredAction = null) {
@@ -863,6 +1007,7 @@ async function activate(element) {
 function requestSystemAction(action) {
   const prompts = {
     logout: ['Сменить пользователя?', 'TV-сессия завершится, и откроется экран входа Fedora.', 'Выйти'],
+    suspend: ['Перевести устройство в сон?', 'Открытые приложения останутся на месте и продолжат работу после пробуждения.', 'Перейти в сон'],
     reboot: ['Перезагрузить мини‑ПК?', 'Все открытые приложения будут закрыты.', 'Перезагрузить'],
     poweroff: ['Выключить мини‑ПК?', 'Все открытые приложения будут закрыты.', 'Выключить']
   };
@@ -871,7 +1016,7 @@ function requestSystemAction(action) {
   openConfirm(title, message, confirmLabel, async () => {
     const result = await window.tv.systemAction(action);
     if (!result?.ok) { closeConfirm(); showToast(result?.message || 'Команда не выполнена'); }
-  }, { tone: action === 'logout' ? 'default' : 'danger', symbol: action === 'logout' ? '⇥' : action === 'reboot' ? '↻' : '⏻' });
+  }, { tone: ['logout', 'suspend'].includes(action) ? 'default' : 'danger', symbol: action === 'logout' ? '⇥' : action === 'suspend' ? '◐' : action === 'reboot' ? '↻' : '⏻' });
 }
 
 async function renderApps() {
@@ -1015,6 +1160,68 @@ async function loadApps() {
     if (!result?.ok) return showToast(result?.message || 'Audio error');
     renderAudio(result);
   });
+  audioOutput.addEventListener('change', async () => {
+    audioOutput.disabled = true;
+    const result = await window.tv.selectAudioOutput(audioOutput.value);
+    audioOutput.disabled = false;
+    if (!result?.ok) return showToast(result?.message || 'Audio error');
+    renderAudio(result);
+    showToast(currentLanguage === 'en' ? 'Audio output selected' : 'Аудиовыход выбран');
+    refreshFocusables(audioOutput);
+  });
+  displayOutput.addEventListener('change', () => {
+    renderSelectedDisplay();
+    refreshFocusables(displayOutput);
+  });
+  displayEnabled.addEventListener('click', () => {
+    displayEnabled.setAttribute('aria-checked', String(displayEnabled.getAttribute('aria-checked') !== 'true'));
+  });
+  displayAdaptive.addEventListener('click', () => {
+    displayAdaptive.setAttribute('aria-checked', String(displayAdaptive.getAttribute('aria-checked') !== 'true'));
+  });
+  displayRefresh.addEventListener('click', async () => {
+    displayRefresh.disabled = true;
+    const result = await window.tv.getDisplays();
+    displayRefresh.disabled = false;
+    renderDisplays(result);
+    if (!result?.ok) showToast(result?.message || 'Display error');
+    refreshFocusables(displayOutput);
+  });
+  displayApply.addEventListener('click', async () => {
+    const output = selectedDisplay();
+    if (!output) return;
+    displayApply.disabled = true;
+    const result = await window.tv.applyDisplay({
+      output: output.name,
+      enabled: displayEnabled.getAttribute('aria-checked') === 'true',
+      mode: displayMode.value,
+      scale: Number(displayScale.value),
+      transform: displayTransform.value,
+      x: Number(displayX.value),
+      y: Number(displayY.value),
+      adaptiveSync: displayAdaptive.getAttribute('aria-checked') === 'true'
+    });
+    displayApply.disabled = false;
+    if (!result?.ok) return showToast(result?.message || 'Display error');
+    renderDisplays(result);
+    showToast(currentLanguage === 'en' ? 'Display settings applied' : 'Настройки дисплея применены');
+    refreshFocusables(displayApply);
+  });
+  powerApply.addEventListener('click', async () => {
+    powerApply.disabled = true;
+    const result = await window.tv.setPowerSettings({
+      idleTimeout: Number(powerIdleTimeout.value),
+      powerButtonAction: powerButtonAction.value,
+      lidAction: powerLidAction.value,
+      lidExternalAction: powerLidExternalAction.value,
+      lidDockedAction: powerLidDockedAction.value
+    });
+    powerApply.disabled = false;
+    if (!result?.ok) return showToast(result?.message || 'Power settings error');
+    renderPower(result.power);
+    showToast(currentLanguage === 'en' ? 'Power settings saved' : 'Настройки питания сохранены');
+    refreshFocusables(powerApply);
+  });
   muteToggle.addEventListener('click', async () => {
     const result = await window.tv.toggleMute();
     if (!result?.ok) return showToast(result?.message || 'Audio error');
@@ -1060,7 +1267,7 @@ async function loadApps() {
   wifiPasswordForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!selectedNetwork) return;
-    const result = await window.tv.connectWifi({ ssid: selectedNetwork.ssid, password: wifiPassword.value });
+    const result = await window.tv.connectWifi({ ssid: selectedNetwork.ssid, uuid: selectedNetwork.uuid, password: wifiPassword.value });
     if (!result?.ok) return showToast(result?.message || 'Wi‑Fi error');
     wifiPasswordForm.hidden = true;
     setKeyboardVisible(false);
@@ -1071,7 +1278,7 @@ async function loadApps() {
   quickWifiPasswordForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (!quickSelectedNetwork) return;
-    const result = await window.tv.connectWifi({ ssid: quickSelectedNetwork.ssid, password: quickWifiPassword.value });
+    const result = await window.tv.connectWifi({ ssid: quickSelectedNetwork.ssid, uuid: quickSelectedNetwork.uuid, password: quickWifiPassword.value });
     if (!result?.ok) return showToast(result?.message || 'Wi‑Fi error');
     quickWifiPasswordForm.hidden = true;
     setKeyboardVisible(false);
@@ -1202,6 +1409,7 @@ document.addEventListener('keydown', (event) => {
   const textEditing = activeInput instanceof HTMLTextAreaElement
     || (activeInput instanceof HTMLInputElement && !['range', 'color', 'checkbox', 'radio', 'button', 'submit'].includes(activeInput.type));
   if (textEditing && (event.key === 'Backspace' || !['back', 'home', 'power'].includes(action))) return;
+  if (activeInput instanceof HTMLSelectElement && ['left', 'right', 'up', 'down', 'select'].includes(action)) return;
   if (activeInput instanceof HTMLInputElement && activeInput.type === 'range' && ['left', 'right'].includes(action)) return;
   if (event.repeat && ['select', 'back', 'home', 'menu', 'power'].includes(action)) return;
   event.preventDefault();
