@@ -1,6 +1,6 @@
 {
   "name": "fedora-tv-os",
-  "version": "2.8.0",
+  "version": "3.0.0",
   "description": "Отдельная телевизионная Wayland-сессия для Fedora",
   "homepage": "https://github.com/BurnToShineact/fedora-tv-launcher",
   "repository": {
@@ -21,7 +21,8 @@
     "pack:dir": "electron-builder --dir",
     "build:rpm": "electron-builder --linux rpm",
     "build:appimage": "electron-builder --linux AppImage",
-    "release:github": "electron-builder --linux rpm --publish always",
+    "release:github": "electron-builder --linux rpm --publish never",
+    "release:metadata": "node scripts/update-release-metadata.js",
     "build:linux": "electron-builder --linux rpm",
     "check": "node --check src/main.js && node --check src/preload.js && node --check src/renderer/launcher.js"
   },
@@ -79,6 +80,7 @@
         "xdg-utils",
         "at-spi2-core",
         "flatpak",
+        "gdm",
         "labwc",
         "polkit",
         "lxqt-policykit",
@@ -86,6 +88,7 @@
         "wlr-randr",
         "wireplumber",
         "bluez",
+        "libcec",
         "NetworkManager"
       ],
       "packageCategory": "System"
@@ -97,6 +100,10 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "packaging/fedora-tv-os-release.asc",
+        "to": "release-key.asc"
       }
     ],
     "publish": [

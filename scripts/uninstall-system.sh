@@ -15,8 +15,10 @@ fi
   /usr/libexec/fedora-tv-os-home \
   /usr/libexec/fedora-tv-os-logout \
   /usr/libexec/fedora-tv-os-system-settings \
-  /usr/share/wayland-sessions/fedora-tv-os.desktop
+  /usr/share/wayland-sessions/fedora-tv-os.desktop \
+  /usr/share/polkit-1/actions/os.fedoratv.system-settings.policy
 /usr/bin/rm -f /etc/systemd/logind.conf.d/90-fedora-tv-os.conf
+/usr/bin/rm -f /etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-tv-os
 /usr/bin/rm -rf /etc/fedora-tv-os
 
 /usr/bin/systemctl reload systemd-logind.service >/dev/null 2>&1 \

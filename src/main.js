@@ -1,6 +1,8 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, globalShortcut, session, dialog, nativeImage, components, powerMonitor, shell } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, globalShortcut, session, dialog, nativeImage, components, powerMonitor, screen, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const crypto = require('crypto');
 const { execFile, spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 
@@ -21,9 +23,14 @@ let confirmationVisible = false;
 let idleActionInProgress = false;
 let lastIdleActionAt = 0;
 let pendingLauncherAction = process.argv.includes('--poweroff') ? 'poweroff' : null;
+let cecChild = null;
+let cecRestartTimer = null;
+let cecState = { enabled: true, available: false, connected: false, message: 'HDMI-CEC ещё не запущен.' };
+let applicationQuitting = false;
 const isDev = process.argv.includes('--dev');
 const isTvSession = process.argv.includes('--tv-session') || process.env.FEDORA_TV_SESSION === '1';
-const updatesEnabled = app.isPackaged;
+const safeMode = process.argv.includes('--safe-mode');
+const updatesEnabled = app.isPackaged && !safeMode;
 const BROWSER_TOOLBAR_HEIGHT = 70;
 const KEYBOARD_HEIGHT = 292;
 const KEYBOARD_VIEWPORT_RATIO = 0.48;
@@ -36,6 +43,16 @@ const POWER_DEFAULTS = {
   lidDockedAction: 'ignore'
 };
 const SYSTEM_COMMAND_ENV = { ...process.env, LC_ALL: 'C', LANG: 'C' };
+
+if (safeMode) app.disableHardwareAcceleration();
+
+function restartApplication() {
+  if (isTvSession) app.exit(42);
+  else {
+    app.relaunch();
+    app.quit();
+  }
+}
 
 function configureWidevine() {
   if (process.platform !== 'linux') return null;
@@ -64,10 +81,11 @@ function configureWidevine() {
   return null;
 }
 
-const widevineInfo = components?.whenReady ? null : configureWidevine();
+const widevineInfo = safeMode || components?.whenReady ? null : configureWidevine();
 protectedMediaVersion = widevineInfo?.version || null;
 
 function initializeMediaComponents() {
+  if (safeMode) return Promise.resolve(false);
   if (!components?.whenReady) return mediaComponentsReady;
   const componentId = components.WIDEVINE_CDM_ID;
   mediaComponentsReady = components.whenReady([componentId]).then(() => {
@@ -78,10 +96,7 @@ function initializeMediaComponents() {
     if (process.platform === 'linux' && installedVersion && activatedVersion !== installedVersion) {
       writeSettings({ widevineActivatedVersion: installedVersion });
       writeUpdateLog('info', 'Restarting once to activate the newly installed Widevine component');
-      setTimeout(() => {
-        app.relaunch();
-        app.quit();
-      }, 500);
+      setTimeout(restartApplication, 500);
     }
     return Boolean(installedVersion);
   }).catch((error) => {
@@ -177,6 +192,23 @@ async function installDownloadedRpm() {
     return { ok: false, message: `Файл обновления недоступен: ${error.message}` };
   }
 
+  const [signature, identity] = await Promise.all([
+    runSystemCommand('rpmkeys', ['--checksig', '--verbose', rpmPath], { timeout: 30000, env: SYSTEM_COMMAND_ENV }),
+    runSystemCommand('rpm', ['-qp', '--queryformat', '%{NAME}\n%{VERSION}\n%{ARCH}\n', rpmPath], { timeout: 30000, env: SYSTEM_COMMAND_ENV })
+  ]);
+  const signatureValid = signature.ok && /Signature[^\n]*:\s*OK/i.test(signature.message);
+  const [packageName, packageVersion, packageArch] = String(identity.message || '').trim().split(/\r?\n/);
+  if (!signatureValid) {
+    const message = /NOKEY/i.test(signature.message)
+      ? 'Ключ подписи обновлений не установлен. Переустановите Fedora TV OS из доверенного RPM.'
+      : 'RPM обновления не имеет корректной подписи Fedora TV OS. Установка остановлена.';
+    writeUpdateLog('error', `${message} ${signature.message}`);
+    return { ok: false, message };
+  }
+  if (!identity.ok || packageName !== 'fedora-tv-os' || packageVersion !== updateState.availableVersion || !['x86_64', 'noarch'].includes(packageArch)) {
+    return { ok: false, message: 'Подписанный RPM не соответствует найденному обновлению Fedora TV OS.' };
+  }
+
   updateInstallInProgress = true;
   writeUpdateLog('info', `Installing downloaded RPM: ${rpmPath}`);
   sendUpdateState({ status: 'installing', stage: 'authorization', progress: 8, message: 'Подготавливаем системное окно подтверждения…' });
@@ -201,7 +233,7 @@ async function installDownloadedRpm() {
   const result = await new Promise((resolve) => {
     const pkexecPath = fs.existsSync('/usr/bin/pkexec') ? '/usr/bin/pkexec' : 'pkexec';
     const dnfPath = fs.existsSync('/usr/bin/dnf') ? '/usr/bin/dnf' : 'dnf';
-    const child = spawn(pkexecPath, [dnfPath, 'install', '--nogpgcheck', '-y', rpmPath], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(pkexecPath, [dnfPath, 'install', '--setopt=localpkg_gpgcheck=True', '-y', rpmPath], { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     let installProgress = 28;
@@ -249,8 +281,7 @@ async function installDownloadedRpm() {
   writeUpdateLog('info', 'RPM installation completed successfully');
   sendUpdateState({ status: 'installed', stage: 'restart', progress: 100, message: 'Обновление установлено. Перезапускаем Fedora TV…' });
   setTimeout(() => {
-    app.relaunch();
-    app.quit();
+    restartApplication();
   }, 800);
   return { ok: true };
 }
@@ -305,9 +336,12 @@ function settingsPath() {
 function readSettings() {
   try {
     const saved = JSON.parse(fs.readFileSync(settingsPath(), 'utf8'));
-    return { language: 'ru', ...saved, power: { ...POWER_DEFAULTS, ...(saved.power || {}) } };
+    const onboardingComplete = Object.prototype.hasOwnProperty.call(saved, 'onboardingComplete')
+      ? Boolean(saved.onboardingComplete)
+      : true;
+    return { language: 'ru', cecEnabled: true, autoHdmiAudio: true, activeProfile: 'main', ambientTimeout: 10, ...saved, onboardingComplete, power: { ...POWER_DEFAULTS, ...(saved.power || {}) } };
   } catch {
-    return { language: 'ru', power: { ...POWER_DEFAULTS } };
+    return { language: 'ru', onboardingComplete: false, cecEnabled: true, autoHdmiAudio: true, activeProfile: 'main', ambientTimeout: 10, power: { ...POWER_DEFAULTS } };
   }
 }
 
@@ -316,6 +350,61 @@ function writeSettings(patch) {
   fs.mkdirSync(path.dirname(settingsPath()), { recursive: true });
   fs.writeFileSync(settingsPath(), JSON.stringify(settings, null, 2), 'utf8');
   return settings;
+}
+
+function publicPreferences() {
+  const { parentalPinHash: _hash, parentalPinSalt: _salt, ...preferences } = readSettings();
+  return { ...preferences, parentalPinSet: Boolean(_hash && _salt) };
+}
+
+function appAllowedForProfile(item, profile = readSettings().activeProfile) {
+  if (profile !== 'kids') return true;
+  if (item.kidsAllowed === false) return false;
+  if (item.kidsAllowed === true) return true;
+  return !['settings', 'files'].includes(item.action);
+}
+
+function appsForActiveProfile() {
+  const profile = readSettings().activeProfile === 'kids' ? 'kids' : 'main';
+  return readApps().filter((item) => appAllowedForProfile(item, profile));
+}
+
+function verifyParentalPin(pin) {
+  const settings = readSettings();
+  if (!settings.parentalPinHash || !settings.parentalPinSalt) return true;
+  try {
+    const actual = crypto.scryptSync(String(pin || ''), Buffer.from(settings.parentalPinSalt, 'hex'), 32);
+    const expected = Buffer.from(settings.parentalPinHash, 'hex');
+    return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
+  } catch {
+    return false;
+  }
+}
+
+function setParentalPin(candidate = {}) {
+  const settings = readSettings();
+  const newPin = String(candidate.newPin || '');
+  if (!/^\d{4,8}$/.test(newPin)) return { ok: false, message: 'PIN должен содержать от 4 до 8 цифр.' };
+  if (settings.parentalPinHash && !verifyParentalPin(candidate.currentPin)) return { ok: false, message: 'Текущий PIN указан неверно.' };
+  const salt = crypto.randomBytes(16);
+  const hash = crypto.scryptSync(newPin, salt, 32);
+  writeSettings({ parentalPinSalt: salt.toString('hex'), parentalPinHash: hash.toString('hex') });
+  return { ok: true, profile: getProfileState() };
+}
+
+function getProfileState() {
+  const settings = readSettings();
+  return { ok: true, active: settings.activeProfile === 'kids' ? 'kids' : 'main', pinSet: Boolean(settings.parentalPinHash && settings.parentalPinSalt) };
+}
+
+function setActiveProfile(profile, pin) {
+  const normalized = profile === 'kids' ? 'kids' : profile === 'main' ? 'main' : '';
+  if (!normalized) return { ok: false, message: 'Неизвестный профиль.' };
+  if (normalized === 'main' && readSettings().activeProfile === 'kids' && !verifyParentalPin(pin)) {
+    return { ok: false, message: 'Неверный PIN.' };
+  }
+  writeSettings({ activeProfile: normalized });
+  return { ok: true, profile: getProfileState(), apps: appsForActiveProfile(), preferences: publicPreferences() };
 }
 
 function backgroundPath() {
@@ -512,6 +601,160 @@ function accentForDesktopId(desktopId) {
   let hash = 0;
   for (const character of desktopId) hash = ((hash * 31) + character.charCodeAt(0)) >>> 0;
   return colors[hash % colors.length];
+}
+
+function normalizeFlatpakRows(value) {
+  const rows = Array.isArray(value) ? value : (value?.data || value?.results || []);
+  return rows.map((item) => ({
+    id: String(item.application || item.app || item.id || '').trim(),
+    name: String(item.name || item.application || item.id || '').trim().slice(0, 80),
+    description: String(item.description || '').trim().slice(0, 240),
+    version: String(item.version || '').trim().slice(0, 80),
+    branch: String(item.branch || 'stable').trim().slice(0, 40),
+    remote: String(item.origin || item.remotes || item.remote || 'flathub').split(',')[0].trim().slice(0, 80)
+  })).filter((item) => /^[A-Za-z0-9][A-Za-z0-9._-]{2,254}$/.test(item.id));
+}
+
+async function ensureUserFlathub() {
+  const result = await runSystemCommand('flatpak', [
+    'remote-add', '--user', '--if-not-exists', 'flathub',
+    'https://dl.flathub.org/repo/flathub.flatpakrepo'
+  ], { timeout: 45000, env: SYSTEM_COMMAND_ENV });
+  if (!result.ok) return { ok: false, message: `Не удалось подключить Flathub: ${result.message}` };
+  return { ok: true };
+}
+
+async function listUserFlatpaks() {
+  const result = await runSystemCommand('flatpak', ['list', '--user', '--app', '--json'], { timeout: 30000, env: SYSTEM_COMMAND_ENV });
+  if (!result.ok) return { ok: false, message: `Не удалось прочитать приложения Flatpak: ${result.message}` };
+  try {
+    return { ok: true, apps: normalizeFlatpakRows(JSON.parse(result.message || '[]')) };
+  } catch {
+    return { ok: false, message: 'Flatpak вернул неизвестный формат списка приложений.' };
+  }
+}
+
+async function searchFlathub(query) {
+  const text = String(query || '').trim().slice(0, 80);
+  if (text.length < 2) return { ok: false, message: 'Введите не менее двух символов.' };
+  const remote = await ensureUserFlathub();
+  if (!remote.ok) return remote;
+  const [searchResult, installedResult] = await Promise.all([
+    runSystemCommand('flatpak', ['search', '--user', '--json', text], { timeout: 60000, env: SYSTEM_COMMAND_ENV }),
+    listUserFlatpaks()
+  ]);
+  if (!searchResult.ok) return { ok: false, message: `Поиск во Flathub не выполнен: ${searchResult.message}` };
+  try {
+    const installed = new Set(installedResult.ok ? installedResult.apps.map((item) => item.id) : []);
+    return {
+      ok: true,
+      apps: normalizeFlatpakRows(JSON.parse(searchResult.message || '[]')).slice(0, 50).map((item) => ({ ...item, installed: installed.has(item.id) }))
+    };
+  } catch {
+    return { ok: false, message: 'Flathub вернул неизвестный формат результатов.' };
+  }
+}
+
+function addFlatpakTile(appId) {
+  const installedApp = installedDesktopApps().find((item) => item.desktopId === `${appId}.desktop`);
+  if (!installedApp) return readApps();
+  const apps = readApps();
+  if (!apps.some((item) => item.type === 'system' && item.desktopId === installedApp.desktopId)) {
+    apps.splice(Math.max(0, apps.findIndex((item) => item.action === 'settings')), 0, {
+      id: makeId(installedApp.title), title: installedApp.title, desktopId: installedApp.desktopId,
+      type: 'system', icon: makeIcon(installedApp.title), iconDataUrl: installedApp.iconDataUrl,
+      accent: accentForDesktopId(installedApp.desktopId), custom: true, flatpakId: appId
+    });
+    writeApps(apps);
+  }
+  return apps;
+}
+
+async function installFlatpak(appId) {
+  const id = String(appId || '').trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{2,254}$/.test(id)) return { ok: false, message: 'Некорректный идентификатор Flatpak.' };
+  const remote = await ensureUserFlathub();
+  if (!remote.ok) return remote;
+  const result = await runSystemCommand('flatpak', [
+    'install', '--user', '--app', '--noninteractive', '--assumeyes', '--or-update', 'flathub', id
+  ], { timeout: 30 * 60 * 1000, env: SYSTEM_COMMAND_ENV });
+  if (!result.ok) return { ok: false, message: `Не удалось установить ${id}: ${result.message}` };
+  return { ok: true, installed: await listUserFlatpaks(), apps: addFlatpakTile(id) };
+}
+
+async function uninstallFlatpak(appId) {
+  const id = String(appId || '').trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{2,254}$/.test(id)) return { ok: false, message: 'Некорректный идентификатор Flatpak.' };
+  const installed = await listUserFlatpaks();
+  if (!installed.ok || !installed.apps.some((item) => item.id === id)) return { ok: false, message: 'Приложение Flatpak не установлено.' };
+  const result = await runSystemCommand('flatpak', ['uninstall', '--user', '--app', '--noninteractive', '--assumeyes', id], {
+    timeout: 20 * 60 * 1000, env: SYSTEM_COMMAND_ENV
+  });
+  if (!result.ok) return { ok: false, message: `Не удалось удалить ${id}: ${result.message}` };
+  const apps = readApps().filter((item) => item.flatpakId !== id && item.desktopId !== `${id}.desktop`);
+  writeApps(apps);
+  return { ok: true, installed: await listUserFlatpaks(), apps };
+}
+
+async function updateFlatpaks() {
+  const result = await runSystemCommand('flatpak', ['update', '--user', '--app', '--noninteractive', '--assumeyes'], {
+    timeout: 45 * 60 * 1000, env: SYSTEM_COMMAND_ENV
+  });
+  return result.ok ? { ok: true, installed: await listUserFlatpaks() } : { ok: false, message: `Не удалось обновить Flatpak: ${result.message}` };
+}
+
+function readTextFile(filePath, limit = 12000) {
+  try { return fs.readFileSync(filePath, 'utf8').slice(-limit); } catch { return ''; }
+}
+
+async function getDiagnostics() {
+  const commands = [
+    ['Kernel', 'uname', ['-a']],
+    ['Graphics', 'lspci', ['-nnk']],
+    ['VA-API', 'vainfo', []],
+    ['Displays', 'wlr-randr', ['--json']],
+    ['Audio', 'wpctl', ['status']],
+    ['Network', 'nmcli', ['general', 'status']],
+    ['Bluetooth', 'bluetoothctl', ['show']],
+    ['HDMI-CEC', 'cec-client', ['-l']],
+    ['Flatpak', 'flatpak', ['list', '--user', '--app', '--columns=application,version,origin']]
+  ];
+  const results = await Promise.all(commands.map(async ([name, command, args]) => {
+    const result = await runSystemCommand(command, args, { timeout: 20000, env: SYSTEM_COMMAND_ENV });
+    return { name, ok: result.ok, output: String(result.message || (result.ok ? 'OK' : 'Unavailable')).slice(0, 12000) };
+  }));
+  const osRelease = readTextFile('/etc/os-release', 4000);
+  const crashLogPath = path.join(process.env.XDG_STATE_HOME || path.join(app.getPath('home'), '.local', 'state'), 'fedora-tv-os', 'crashes.log');
+  return {
+    generatedAt: new Date().toISOString(),
+    app: {
+      version: app.getVersion(), packaged: app.isPackaged, safeMode, tvSession: isTvSession,
+      electron: process.versions.electron, chrome: process.versions.chrome, node: process.versions.node,
+      widevine: protectedMediaVersion || null, arch: process.arch
+    },
+    system: { platform: os.platform(), release: os.release(), osRelease, autologin: getAutologinState() },
+    checks: results,
+    logs: {
+      crashes: readTextFile(crashLogPath),
+      updates: readTextFile(path.join(app.getPath('userData'), 'update.log'))
+    }
+  };
+}
+
+async function exportDiagnostics() {
+  const report = await getDiagnostics();
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Сохранить диагностику Fedora TV OS',
+    defaultPath: path.join(app.getPath('documents'), `fedora-tv-os-diagnostics-${new Date().toISOString().slice(0, 10)}.json`),
+    filters: [{ name: 'JSON', extensions: ['json'] }]
+  });
+  if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+  try {
+    fs.writeFileSync(result.filePath, JSON.stringify(report, null, 2), { encoding: 'utf8', mode: 0o600 });
+    return { ok: true, filePath: result.filePath };
+  } catch (error) {
+    return { ok: false, message: `Не удалось сохранить отчёт: ${error.message}` };
+  }
 }
 
 function cleanBrowserUserAgent(userAgent) {
@@ -938,6 +1181,128 @@ function playbackIsActive() {
   );
 }
 
+function sendShellKey(keyCode) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.focus();
+  mainWindow.webContents.sendInputEvent({ type: 'keyDown', keyCode });
+  mainWindow.webContents.sendInputEvent({ type: 'keyUp', keyCode });
+}
+
+async function handleCecKey(keyName) {
+  const key = String(keyName || '').toLowerCase().trim();
+  const keyMap = {
+    up: 'Up', down: 'Down', left: 'Left', right: 'Right', select: 'Enter', enter: 'Enter',
+    exit: 'Escape', back: 'Escape', 'root menu': 'Home', 'contents menu': 'F10', setup: 'F10'
+  };
+  if (key === 'volume up') return runSystemCommand('wpctl', ['set-volume', '@DEFAULT_AUDIO_SINK@', '5%+']);
+  if (key === 'volume down') return runSystemCommand('wpctl', ['set-volume', '@DEFAULT_AUDIO_SINK@', '5%-']);
+  if (key === 'mute') return runSystemCommand('wpctl', ['set-mute', '@DEFAULT_AUDIO_SINK@', 'toggle']);
+  if (['play', 'pause', 'play pause', 'stop'].includes(key)) return controlWebMedia(key === 'stop' ? 'stop' : key === 'pause' ? 'pause' : 'play-pause');
+  const mapped = keyMap[key];
+  if (!mapped) return;
+  if (mapped === 'Home') return showLauncher();
+  sendShellKey(mapped);
+}
+
+function scheduleCecRestart() {
+  clearTimeout(cecRestartTimer);
+  if (applicationQuitting || safeMode || readSettings().cecEnabled === false) return;
+  cecRestartTimer = setTimeout(startCecBridge, 15000);
+  cecRestartTimer.unref?.();
+}
+
+function stopCecBridge() {
+  clearTimeout(cecRestartTimer);
+  cecRestartTimer = null;
+  const child = cecChild;
+  cecChild = null;
+  if (child && !child.killed) child.kill('SIGTERM');
+  cecState = { ...cecState, connected: false };
+}
+
+function startCecBridge() {
+  stopCecBridge();
+  const enabled = readSettings().cecEnabled !== false;
+  if (!enabled || safeMode || !isTvSession) {
+    cecState = { enabled, available: false, connected: false, message: enabled ? 'HDMI-CEC отключён в безопасном режиме.' : 'HDMI-CEC выключен.' };
+    return;
+  }
+  let finished = false;
+  try {
+    const child = spawn('cec-client', ['-d', '8', '-t', 'p', '-o', 'Fedora TV OS'], { stdio: ['pipe', 'pipe', 'pipe'], env: SYSTEM_COMMAND_ENV });
+    cecChild = child;
+    cecState = { enabled: true, available: true, connected: false, message: 'Ищем HDMI-CEC адаптер…' };
+    const handleOutput = (chunk) => {
+      for (const line of String(chunk).split(/\r?\n/)) {
+        const pressed = line.match(/key pressed:\s*([^,(]+)/i);
+        if (pressed) handleCecKey(pressed[1]);
+        if (/CEC client registered|logical address|registered as device/i.test(line)) {
+          cecState = { enabled: true, available: true, connected: true, message: 'HDMI-CEC подключён.' };
+        } else if (/no adapters found|could not open a connection|connection failed/i.test(line)) {
+          cecState = { enabled: true, available: false, connected: false, message: 'HDMI-CEC адаптер не найден.' };
+        }
+      }
+    };
+    child.stdout.on('data', handleOutput);
+    child.stderr.on('data', handleOutput);
+    child.on('error', (error) => {
+      if (finished) return;
+      finished = true;
+      const wasCurrent = cecChild === child;
+      if (wasCurrent) cecChild = null;
+      cecState = { enabled: true, available: false, connected: false, message: /ENOENT/.test(error.message) ? 'Установите пакет libcec.' : error.message };
+      if (wasCurrent) scheduleCecRestart();
+    });
+    child.on('close', () => {
+      if (finished) return;
+      finished = true;
+      const wasCurrent = cecChild === child;
+      if (wasCurrent) cecChild = null;
+      cecState = { ...cecState, connected: false };
+      if (wasCurrent) scheduleCecRestart();
+    });
+  } catch (error) {
+    cecState = { enabled: true, available: false, connected: false, message: error.message };
+    scheduleCecRestart();
+  }
+}
+
+function setCecEnabled(enabled) {
+  writeSettings({ cecEnabled: Boolean(enabled) });
+  if (enabled) startCecBridge(); else stopCecBridge();
+  cecState = { ...cecState, enabled: Boolean(enabled), message: enabled ? cecState.message : 'HDMI-CEC выключен.' };
+  return { ok: true, ...cecState };
+}
+
+async function selectHdmiAudioIfRequested() {
+  if (readSettings().autoHdmiAudio === false) return;
+  const audio = await getAudioState();
+  if (!audio.ok || audio.outputs.some((output) => output.default && /HDMI|DisplayPort/i.test(output.name))) return;
+  const hdmi = audio.outputs.find((output) => /HDMI|DisplayPort/i.test(output.name));
+  if (hdmi) await selectAudioOutput(hdmi.id);
+}
+
+function setupDisplayHotplug() {
+  if (!isTvSession || safeMode) return;
+  let timer = null;
+  let applying = false;
+  const changed = () => {
+    if (applying) return;
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      applying = true;
+      try {
+        await applySavedDisplayConfiguration();
+        await selectHdmiAudioIfRequested();
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('system:hardware-changed');
+      } finally {
+        setTimeout(() => { applying = false; }, 1500);
+      }
+    }, 1200);
+  };
+  for (const eventName of ['display-added', 'display-removed', 'display-metrics-changed']) screen.on(eventName, changed);
+}
+
 function startIdleMonitor() {
   if (!isTvSession) return;
   setInterval(async () => {
@@ -970,7 +1335,9 @@ app.whenReady().then(() => {
   createWindow();
   initializeMediaComponents();
   startIdleMonitor();
-  if (isTvSession) setTimeout(() => applySavedDisplayConfiguration(), 1600);
+  setupDisplayHotplug();
+  startCecBridge();
+  if (isTvSession && !safeMode) setTimeout(() => applySavedDisplayConfiguration(), 1600);
   mainWindow.webContents.once('did-finish-load', () => {
     sendUpdateState();
     if (pendingLauncherAction) {
@@ -991,10 +1358,14 @@ app.whenReady().then(() => {
 });
 }
 
-app.on('will-quit', () => globalShortcut.unregisterAll());
+app.on('will-quit', () => {
+  applicationQuitting = true;
+  stopCecBridge();
+  globalShortcut.unregisterAll();
+});
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
-ipcMain.handle('apps:get', () => readApps());
+ipcMain.handle('apps:get', () => appsForActiveProfile());
 ipcMain.handle('files:list', (_event, directoryPath) => listFiles(directoryPath));
 ipcMain.handle('files:open', (_event, filePath) => openFile(filePath));
 ipcMain.handle('background:get', () => readBackground());
@@ -1049,6 +1420,12 @@ ipcMain.handle('system-apps:add', (_event, desktopId) => {
   return { ok: true, apps };
 });
 
+ipcMain.handle('flatpak:list', () => listUserFlatpaks());
+ipcMain.handle('flatpak:search', (_event, query) => searchFlathub(query));
+ipcMain.handle('flatpak:install', (_event, appId) => installFlatpak(appId));
+ipcMain.handle('flatpak:uninstall', (_event, appId) => uninstallFlatpak(appId));
+ipcMain.handle('flatpak:update', () => updateFlatpaks());
+
 ipcMain.handle('apps:delete', (_event, id) => {
   const apps = readApps();
   const target = apps.find((item) => item.id === id);
@@ -1059,10 +1436,48 @@ ipcMain.handle('apps:delete', (_event, id) => {
   return { ok: true, apps: updated };
 });
 
+ipcMain.handle('apps:favorite', (_event, id, favorite) => {
+  const apps = readApps();
+  const target = apps.find((item) => item.id === id);
+  if (!target) return { ok: false, message: 'Приложение не найдено' };
+  target.favorite = Boolean(favorite);
+  const ordered = apps.map((item, index) => ({ item, index }))
+    .sort((a, b) => Number(Boolean(b.item.favorite)) - Number(Boolean(a.item.favorite)) || a.index - b.index)
+    .map(({ item }) => item);
+  writeApps(ordered);
+  return { ok: true, apps: ordered };
+});
+
+ipcMain.handle('apps:move', (_event, id, direction) => {
+  const apps = readApps();
+  const index = apps.findIndex((item) => item.id === id);
+  const offset = direction === 'up' ? -1 : direction === 'down' ? 1 : 0;
+  const targetIndex = index + offset;
+  if (index < 0 || !offset || targetIndex < 0 || targetIndex >= apps.length) return { ok: false, message: 'Плитку нельзя переместить дальше.' };
+  [apps[index], apps[targetIndex]] = [apps[targetIndex], apps[index]];
+  writeApps(apps);
+  return { ok: true, apps };
+});
+
+ipcMain.handle('apps:set-kids', (_event, id, allowed) => {
+  if (readSettings().activeProfile === 'kids') return { ok: false, message: 'Переключитесь в основной профиль.' };
+  const apps = readApps();
+  const target = apps.find((item) => item.id === id);
+  if (!target) return { ok: false, message: 'Приложение не найдено' };
+  target.kidsAllowed = Boolean(allowed);
+  writeApps(apps);
+  return { ok: true, apps };
+});
+
+ipcMain.handle('profile:get', () => getProfileState());
+ipcMain.handle('profile:set', (_event, profile, pin) => setActiveProfile(profile, pin));
+ipcMain.handle('parental:set-pin', (_event, candidate) => setParentalPin(candidate));
+
 ipcMain.handle('app:open', async (_event, selectedApp) => {
   if (!selectedApp || typeof selectedApp !== 'object') return { ok: false };
   const storedApp = readApps().find((item) => item.id === selectedApp.id);
   if (!storedApp) return { ok: false, message: 'Приложение не найдено' };
+  if (!appAllowedForProfile(storedApp)) return { ok: false, message: 'Это приложение недоступно в детском профиле.' };
   if (['settings', 'files'].includes(storedApp.action)) return { ok: true, action: storedApp.action };
   if (storedApp.type === 'system') {
     const installedApp = findInstalledDesktopApp(storedApp.desktopId);
@@ -1523,6 +1938,56 @@ function powerHelperPath() {
   return null;
 }
 
+function getAutologinState() {
+  const userName = os.userInfo().username;
+  try {
+    const contents = fs.readFileSync('/etc/gdm/custom.conf', 'utf8');
+    let inDaemon = false;
+    let enabled = false;
+    let configuredUser = '';
+    for (const rawLine of contents.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (/^\[daemon\]$/i.test(line)) { inDaemon = true; continue; }
+      if (/^\[.+\]$/.test(line)) { inDaemon = false; continue; }
+      if (!inDaemon || line.startsWith('#')) continue;
+      const separator = line.indexOf('=');
+      if (separator < 0) continue;
+      const key = line.slice(0, separator).trim();
+      const value = line.slice(separator + 1).trim();
+      if (key === 'AutomaticLoginEnable') enabled = /^(?:true|yes|1)$/i.test(value);
+      if (key === 'AutomaticLogin') configuredUser = value;
+    }
+    return { ok: true, enabled: enabled && configuredUser === userName, configuredUser, userName };
+  } catch (error) {
+    if (error.code === 'ENOENT') return { ok: true, enabled: false, configuredUser: '', userName };
+    return { ok: false, enabled: false, configuredUser: '', userName, message: 'Не удалось прочитать настройки GDM.' };
+  }
+}
+
+async function setAutologin(enabled) {
+  const helper = powerHelperPath();
+  if (!helper) return { ok: false, message: 'Системный helper не установлен. Соберите и установите новый RPM.' };
+  const agentReady = await ensurePolicyKitAgent();
+  if (!agentReady) return { ok: false, message: 'Не найден агент PolicyKit для подтверждения системных настроек.' };
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setKiosk(false);
+    mainWindow.setFullScreen(false);
+    mainWindow.show();
+    mainWindow.focus();
+  }
+  const pkexecPath = fs.existsSync('/usr/bin/pkexec') ? '/usr/bin/pkexec' : 'pkexec';
+  const userName = os.userInfo().username;
+  const result = await runSystemCommand(pkexecPath, [
+    helper, 'autologin', enabled ? 'enable' : 'disable', userName
+  ], { timeout: 120000, env: SYSTEM_COMMAND_ENV });
+  restoreKioskWindow();
+  if (!result.ok) {
+    const canceled = /dismissed|cancel|not authorized|authentication.*failed/i.test(result.message);
+    return { ok: false, message: canceled ? 'Изменение автозапуска отменено.' : `Не удалось изменить автозапуск: ${result.message}` };
+  }
+  return getAutologinState();
+}
+
 function validatePowerSettings(candidate = {}) {
   const idleTimeout = [0, 5, 10, 20, 30, 60, 120].includes(Number(candidate.idleTimeout)) ? Number(candidate.idleTimeout) : 0;
   const powerActions = ['ask', 'poweroff', 'suspend', 'ignore'];
@@ -1562,11 +2027,17 @@ async function setPowerSettings(candidate) {
 }
 
 ipcMain.handle('settings:get', async () => {
-  const preferences = readSettings();
+  const preferences = publicPreferences();
   const [audio, wifi, bluetooth, displays] = await Promise.all([getAudioState(), getWifiState(false), getBluetoothState(false), getDisplayState()]);
-  return { ok: true, preferences, audio, wifi, bluetooth, displays, power: { ok: true, ...preferences.power } };
+  return { ok: true, preferences, audio, wifi, bluetooth, displays, autologin: getAutologinState(), cec: { ok: true, ...cecState }, power: { ok: true, ...preferences.power } };
 });
-ipcMain.handle('settings:get-preferences', () => readSettings());
+ipcMain.handle('settings:get-preferences', () => publicPreferences());
+ipcMain.handle('onboarding:complete', () => {
+  writeSettings({ onboardingComplete: true });
+  return { ok: true, preferences: publicPreferences() };
+});
+ipcMain.handle('diagnostics:get', () => getDiagnostics());
+ipcMain.handle('diagnostics:export', () => exportDiagnostics());
 ipcMain.handle('audio:set-volume', async (_event, volume) => {
   const safeVolume = Math.max(0, Math.min(100, Number(volume) || 0));
   const result = await runSystemCommand('wpctl', ['set-volume', '@DEFAULT_AUDIO_SINK@', `${safeVolume}%`]);
@@ -1580,6 +2051,12 @@ ipcMain.handle('audio:select-output', (_event, id) => selectAudioOutput(id));
 ipcMain.handle('display:get', () => getDisplayState());
 ipcMain.handle('display:apply', (_event, candidate) => applyDisplaySettings(candidate));
 ipcMain.handle('power:set', (_event, candidate) => setPowerSettings(candidate));
+ipcMain.handle('autologin:set', (_event, enabled) => setAutologin(Boolean(enabled)));
+ipcMain.handle('cec:set', (_event, enabled) => setCecEnabled(Boolean(enabled)));
+ipcMain.handle('hdmi-audio:set', (_event, enabled) => {
+  writeSettings({ autoHdmiAudio: Boolean(enabled) });
+  return { ok: true, preferences: publicPreferences() };
+});
 ipcMain.handle('wifi:scan', () => getWifiState(true));
 ipcMain.handle('wifi:toggle', async (_event, enabled) => {
   const result = await runSystemCommand('nmcli', ['radio', 'wifi', enabled ? 'on' : 'off']);
@@ -1590,7 +2067,15 @@ ipcMain.handle('bluetooth:get', () => getBluetoothState(false));
 ipcMain.handle('bluetooth:scan', () => getBluetoothState(true));
 ipcMain.handle('bluetooth:toggle', (_event, enabled) => toggleBluetooth(Boolean(enabled)));
 ipcMain.handle('bluetooth:device-toggle', (_event, address) => toggleBluetoothDevice(address));
-ipcMain.handle('language:set', (_event, language) => writeSettings({ language: language === 'en' ? 'en' : 'ru' }));
+ipcMain.handle('language:set', (_event, language) => {
+  writeSettings({ language: language === 'en' ? 'en' : 'ru' });
+  return publicPreferences();
+});
+ipcMain.handle('appearance:set-screensaver', (_event, timeout) => {
+  const value = [0, 1, 5, 10, 20, 30].includes(Number(timeout)) ? Number(timeout) : 10;
+  writeSettings({ ambientTimeout: value });
+  return { ok: true, preferences: publicPreferences() };
+});
 ipcMain.on('external:home', showLauncher);
 
 
@@ -1598,7 +2083,8 @@ ipcMain.handle('app:get-info', () => ({
   version: app.getVersion(),
   packaged: app.isPackaged,
   appImage: Boolean(process.env.APPIMAGE),
-  widevine: protectedMediaVersion
+  widevine: protectedMediaVersion,
+  safeMode
 }));
 ipcMain.handle('update:get-state', () => updateState);
 ipcMain.handle('update:check', () => checkForUpdates());

@@ -50,6 +50,12 @@ const systemAppPicker = document.getElementById('system-app-picker');
 const systemAppList = document.getElementById('system-app-list');
 const systemAppRefresh = document.getElementById('system-app-refresh');
 const manageList = document.getElementById('manage-list');
+const flatpakSearchForm = document.getElementById('flatpak-search-form');
+const flatpakSearch = document.getElementById('flatpak-search');
+const flatpakSearchButton = document.getElementById('flatpak-search-button');
+const flatpakUpdate = document.getElementById('flatpak-update');
+const flatpakStatus = document.getElementById('flatpak-status');
+const flatpakList = document.getElementById('flatpak-list');
 const toast = document.getElementById('toast');
 const appVersion = document.getElementById('app-version');
 const updateMessage = document.getElementById('update-message');
@@ -118,6 +124,28 @@ const powerLidAction = document.getElementById('power-lid-action');
 const powerLidExternalAction = document.getElementById('power-lid-external-action');
 const powerLidDockedAction = document.getElementById('power-lid-docked-action');
 const powerApply = document.getElementById('power-apply');
+const shellAutostart = document.getElementById('shell-autostart');
+const shellAutostartStatus = document.getElementById('shell-autostart-status');
+const cecToggle = document.getElementById('cec-toggle');
+const cecStatus = document.getElementById('cec-status');
+const hdmiAudioToggle = document.getElementById('hdmi-audio-toggle');
+const diagnosticsRefresh = document.getElementById('diagnostics-refresh');
+const diagnosticsExport = document.getElementById('diagnostics-export');
+const diagnosticsOutput = document.getElementById('diagnostics-output');
+const onboarding = document.getElementById('onboarding');
+const onboardingStart = document.getElementById('onboarding-start');
+const onboardingSkip = document.getElementById('onboarding-skip');
+const profileStatus = document.getElementById('profile-status');
+const profileSelect = document.getElementById('profile-select');
+const profilePin = document.getElementById('profile-pin');
+const profileApply = document.getElementById('profile-apply');
+const parentalPinForm = document.getElementById('parental-pin-form');
+const parentalCurrentPin = document.getElementById('parental-current-pin');
+const parentalNewPin = document.getElementById('parental-new-pin');
+const screensaverTimeout = document.getElementById('screensaver-timeout');
+const screensaver = document.getElementById('screensaver');
+const screensaverClock = document.getElementById('screensaver-clock');
+const screensaverDate = document.getElementById('screensaver-date');
 const wifiToggle = document.getElementById('wifi-toggle');
 const wifiScan = document.getElementById('wifi-scan');
 const wifiList = document.getElementById('wifi-list');
@@ -155,14 +183,30 @@ let latestBluetoothState = null;
 let latestDisplayState = null;
 let activeSettingsCategory = null;
 let currentFilesState = { path: null, parentPath: null, entries: [] };
+let flatpakLoading = false;
+let currentProfile = 'main';
+let ambientTimeoutMinutes = 10;
+let ambientTimer = null;
 const rememberedFocus = new WeakMap();
 const overlayReturnFocus = new WeakMap();
 
 const translations = {
   ru: {
+    startupGroup: 'Запуск', startupTitle: 'Автозапуск оболочки', startupEnabled: 'Сразу открывать Fedora TV OS после включения', startupDescription: 'Без ввода пароля и экрана выбора пользователей. Выключение вернёт обычный экран GDM после следующей загрузки.',
+    flatpakCatalog: 'Каталог приложений', updateAllApps: 'Обновить все', flatpakDescription: 'Установка выполняется только для TV-пользователя и не требует прав администратора.', searchApps: 'Найти',
+    diagnosticsGroup: 'Поддержка', diagnosticsTitle: 'Диагностика', diagnosticsDescription: 'Проверка видео, звука, сети, Bluetooth, Flatpak и журналов оболочки.', runDiagnostics: 'Проверить', exportDiagnostics: 'Сохранить отчёт', welcomeTitle: 'Добро пожаловать', welcomeDescription: 'Настроим сеть, звук и телевизор. После этого всё управление будет доступно с пульта.', welcomeNetwork: 'Подключение к Wi‑Fi', welcomeSound: 'Проверка звука и экрана', welcomeApps: 'Установка приложений', skipSetup: 'Пропустить', startSetup: 'Начать настройку',
+    cecTitle: 'Пульт телевизора и звук', cecEnabled: 'Управление через HDMI-CEC', cecDescription: 'Кнопки пульта телевизора управляют оболочкой при наличии CEC-адаптера.', autoHdmiAudio: 'Автоматически выбирать звук HDMI', autoHdmiAudioDescription: 'При подключении телевизора переключать звук на HDMI или DisplayPort.',
+    profilesGroup: 'Доступ', profilesTitle: 'Профили и родительский PIN', profilesDescription: 'В детском профиле скрыты настройки, файлы и отмеченные вами приложения.', activeProfile: 'Активный профиль', mainProfile: 'Основной', kidsProfile: 'Детский', parentalPin: 'Текущий PIN', switchProfile: 'Переключить профиль', savePin: 'Сохранить PIN',
+    screensaverGroup: 'Экран', screensaverTitle: 'Заставка с часами', screensaverDescription: 'Показывается только на домашнем экране; видео и открытые приложения не прерываются.', screensaverAfter: 'Включать после',
     soundGroup: 'Звук', soundTitle: 'Громкость', mute: 'Выключить звук', unmute: 'Включить звук', networkTitle: 'Беспроводная сеть', scan: 'Обновить список', connect: 'Подключиться', cancel: 'Отмена', languageGroup: 'Язык', languageTitle: 'Язык интерфейса', inputGroup: 'Ввод', keyboardTitle: 'Экранная клавиатура', keyboardDescription: 'Открывается автоматически в полях ввода. Её также можно включить кнопкой ⌨ в верхней панели.', openKeyboard: 'Открыть клавиатуру', noNetworks: 'Сети Wi‑Fi не найдены.', wifiOff: 'Wi‑Fi выключен', connected: 'Подключено', secured: 'Защищённая сеть', savedNetwork: 'Сохранённая сеть', open: 'Открытая сеть', signal: 'Сигнал', password: 'Пароль для', apps: 'Приложения', settings: 'Настройки', webApp: 'Веб-приложение', systemApp: 'Системное · Home для возврата', settingsKind: 'Настройки оболочки', addApp: 'Добавить приложение', addKind: 'Сайт или приложение из системы', brandSubtitle: 'Отдельная TV-сессия', logout: 'Сменить пользователя', reboot: 'Перезагрузка', poweroff: 'Выключение', newTile: 'Новая плитка', website: 'Веб-сайт', fromSystem: 'Из системы', systemGroup: 'Система', updateTitle: 'Обновление Fedora TV OS', checkUpdates: 'Проверить обновления', appearanceGroup: 'Оформление', backgroundTitle: 'Фоновое изображение', chooseImage: 'Выбрать изображение', resetBackground: 'Сбросить фон', myApps: 'Мои приложения', done: 'Готово', displayGroup: 'Изображение', displayTitle: 'Дисплеи', displayDescription: 'Выберите экран и настройте его видеорежим. Изменения сохраняются для следующих запусков TV-сессии.', displayOutput: 'Дисплей', displayMode: 'Разрешение и частота', displayScale: 'Масштаб', displayRotation: 'Поворот', displayPositionX: 'Позиция X', displayPositionY: 'Позиция Y', displayEnabled: 'Использовать дисплей', displayEnabledHint: 'Единственный активный экран отключить нельзя.', adaptiveSync: 'Адаптивная частота', adaptiveSyncHint: 'Использовать VRR, если дисплей и видеодрайвер поддерживают его.', rotationNormal: 'Обычный', apply: 'Применить', refreshDevices: 'Обновить устройства', audioOutput: 'Устройство вывода', powerGroup: 'Питание', powerTitle: 'Сон, крышка и кнопки', powerDescription: 'Таймер сна действует в TV-сессии. Крышка и физическая кнопка питания настраиваются для всего устройства после системного подтверждения.', sleepAfter: 'Переходить в сон', never: 'Никогда', powerButton: 'Кнопка питания', askBeforePoweroff: 'Показать подтверждение', poweroffNow: 'Выключить', sleep: 'Сон', doNothing: 'Ничего не делать', lidBattery: 'Закрытие крышки', lidExternalPower: 'Крышка при питании от сети', lidDocked: 'Крышка с внешним дисплеем', applyPower: 'Сохранить настройки питания', bluetoothTitle: 'Bluetooth', bluetoothDescription: 'Подключайте наушники, колонки, пульты и другие устройства.', findDevices: 'Найти устройства', bluetoothOff: 'Bluetooth выключен', noBluetoothDevices: 'Устройства Bluetooth не найдены.', paired: 'Сопряжено', connecting: 'Подключаем…', disconnect: 'Отключить', categorySystem: 'Система', categorySystemHint: 'Обновления и питание', categoryPicture: 'Изображение и звук', categoryPictureHint: 'Экран, масштаб и громкость', categoryConnections: 'Подключения', categoryConnectionsHint: 'Wi‑Fi и Bluetooth', categoryAppearance: 'Оформление', categoryAppearanceHint: 'Фоновое изображение', categoryInput: 'Язык и ввод', categoryInputHint: 'Язык и экранная клавиатура', categoryApps: 'Приложения', categoryAppsHint: 'Добавленные плитки', allSettings: 'Все настройки', filesEyebrow: 'Проводник', filesTitle: 'Файлы', location: 'Расположение', filesHint: 'Выберите папку для перехода или файл, чтобы открыть его в подходящем приложении.'
   },
   en: {
+    startupGroup: 'Startup', startupTitle: 'Shell autostart', startupEnabled: 'Open Fedora TV OS immediately after power-on', startupDescription: 'Skips the password and user picker. Turning this off restores the regular GDM login screen after the next boot.',
+    flatpakCatalog: 'App catalog', updateAllApps: 'Update all', flatpakDescription: 'Apps are installed only for the TV user and do not require administrator access.', searchApps: 'Search',
+    diagnosticsGroup: 'Support', diagnosticsTitle: 'Diagnostics', diagnosticsDescription: 'Checks video, audio, network, Bluetooth, Flatpak, and shell logs.', runDiagnostics: 'Run checks', exportDiagnostics: 'Save report', welcomeTitle: 'Welcome', welcomeDescription: 'Let’s set up the network, sound, and TV. Everything will then work from your remote.', welcomeNetwork: 'Connect to Wi-Fi', welcomeSound: 'Check sound and display', welcomeApps: 'Install apps', skipSetup: 'Skip', startSetup: 'Start setup',
+    cecTitle: 'TV remote and audio', cecEnabled: 'Control through HDMI-CEC', cecDescription: 'TV remote buttons control the shell when a CEC adapter is available.', autoHdmiAudio: 'Select HDMI audio automatically', autoHdmiAudioDescription: 'Switch sound to HDMI or DisplayPort when a TV is connected.',
+    profilesGroup: 'Access', profilesTitle: 'Profiles and parental PIN', profilesDescription: 'The kids profile hides settings, files, and apps you mark as restricted.', activeProfile: 'Active profile', mainProfile: 'Main', kidsProfile: 'Kids', parentalPin: 'Current PIN', switchProfile: 'Switch profile', savePin: 'Save PIN',
+    screensaverGroup: 'Screen', screensaverTitle: 'Clock screensaver', screensaverDescription: 'Shown only on Home; videos and open apps are not interrupted.', screensaverAfter: 'Start after',
     soundGroup: 'Sound', soundTitle: 'Volume', mute: 'Mute', unmute: 'Unmute', networkTitle: 'Wireless network', scan: 'Refresh list', connect: 'Connect', cancel: 'Cancel', languageGroup: 'Language', languageTitle: 'Interface language', inputGroup: 'Input', keyboardTitle: 'On-screen keyboard', keyboardDescription: 'Opens automatically for text fields. You can also use the ⌨ button in the top bar.', openKeyboard: 'Open keyboard', noNetworks: 'No Wi-Fi networks found.', wifiOff: 'Wi-Fi is off', connected: 'Connected', secured: 'Secured network', savedNetwork: 'Saved network', open: 'Open network', signal: 'Signal', password: 'Password for', apps: 'Apps', settings: 'Settings', webApp: 'Web app', systemApp: 'System app · Home to return', settingsKind: 'Shell settings', addApp: 'Add app', addKind: 'Website or system app', brandSubtitle: 'Dedicated TV session', logout: 'Switch user', reboot: 'Restart', poweroff: 'Power off', newTile: 'New tile', website: 'Website', fromSystem: 'From system', systemGroup: 'System', updateTitle: 'Fedora TV OS update', checkUpdates: 'Check for updates', appearanceGroup: 'Appearance', backgroundTitle: 'Background image', chooseImage: 'Choose image', resetBackground: 'Reset background', myApps: 'My apps', done: 'Done', displayGroup: 'Picture', displayTitle: 'Displays', displayDescription: 'Choose a screen and configure its video mode. Changes are saved for future TV sessions.', displayOutput: 'Display', displayMode: 'Resolution and refresh rate', displayScale: 'Scale', displayRotation: 'Rotation', displayPositionX: 'Position X', displayPositionY: 'Position Y', displayEnabled: 'Use this display', displayEnabledHint: 'The only active display cannot be disabled.', adaptiveSync: 'Adaptive refresh rate', adaptiveSyncHint: 'Use VRR when supported by the display and video driver.', rotationNormal: 'Normal', apply: 'Apply', refreshDevices: 'Refresh devices', audioOutput: 'Output device', powerGroup: 'Power', powerTitle: 'Sleep, lid and buttons', powerDescription: 'The sleep timer applies to the TV session. Lid and physical power button settings apply to the whole device after system confirmation.', sleepAfter: 'Go to sleep after', never: 'Never', powerButton: 'Power button', askBeforePoweroff: 'Ask before powering off', poweroffNow: 'Power off', sleep: 'Sleep', doNothing: 'Do nothing', lidBattery: 'Close lid', lidExternalPower: 'Close lid on AC power', lidDocked: 'Close lid with external display', applyPower: 'Save power settings', bluetoothTitle: 'Bluetooth', bluetoothDescription: 'Connect headphones, speakers, remotes, and other devices.', findDevices: 'Find devices', bluetoothOff: 'Bluetooth is off', noBluetoothDevices: 'No Bluetooth devices found.', paired: 'Paired', connecting: 'Connecting…', disconnect: 'Disconnect', categorySystem: 'System', categorySystemHint: 'Updates and power', categoryPicture: 'Picture and sound', categoryPictureHint: 'Display, scale, and volume', categoryConnections: 'Connections', categoryConnectionsHint: 'Wi‑Fi and Bluetooth', categoryAppearance: 'Appearance', categoryAppearanceHint: 'Background image', categoryInput: 'Language and input', categoryInputHint: 'Language and on-screen keyboard', categoryApps: 'Apps', categoryAppsHint: 'Added tiles', allSettings: 'All settings', filesEyebrow: 'File browser', filesTitle: 'Files', location: 'Location', filesHint: 'Choose a folder to browse it or a file to open it in the appropriate app.'
   }
 };
@@ -322,7 +366,34 @@ function updateClock() {
   const locale = currentLanguage === 'en' ? 'en-US' : 'ru-RU';
   clock.textContent = new Intl.DateTimeFormat(locale, { hour:'2-digit', minute:'2-digit' }).format(now);
   dateLabel.textContent = new Intl.DateTimeFormat(locale, { weekday:'short', day:'numeric', month:'long' }).format(now);
+  screensaverClock.textContent = new Intl.DateTimeFormat(locale, { hour:'2-digit', minute:'2-digit' }).format(now);
+  screensaverDate.textContent = new Intl.DateTimeFormat(locale, { weekday:'long', day:'numeric', month:'long' }).format(now);
   updateGreeting(now);
+}
+
+function hideScreensaver() {
+  if (screensaver.hidden) return false;
+  screensaver.hidden = true;
+  resetAmbientTimer();
+  return true;
+}
+
+function resetAmbientTimer() {
+  clearTimeout(ambientTimer);
+  ambientTimer = null;
+  if (!ambientTimeoutMinutes) return;
+  ambientTimer = setTimeout(() => {
+    if (browserOpen || activeOverlay() || keyboardOpen || document.hidden) return resetAmbientTimer();
+    updateClock();
+    screensaver.hidden = false;
+  }, ambientTimeoutMinutes * 60 * 1000);
+}
+
+function applyAmbientPreference(preferences = {}) {
+  ambientTimeoutMinutes = [0, 1, 5, 10, 20, 30].includes(Number(preferences.ambientTimeout)) ? Number(preferences.ambientTimeout) : 10;
+  screensaverTimeout.value = String(ambientTimeoutMinutes);
+  if (!ambientTimeoutMinutes) screensaver.hidden = true;
+  resetAmbientTimer();
 }
 
 function updateGreeting(now = new Date()) {
@@ -342,6 +413,7 @@ function showToast(message) {
 }
 
 function activeOverlay() {
+  if (!onboarding.hidden) return onboarding;
   if (!backdrop.hidden) return backdrop;
   if (!quickPanel.hidden) return quickPanel;
   if (!addBackdrop.hidden) return addBackdrop;
@@ -541,8 +613,110 @@ async function loadSystemApps() {
   }
 }
 
+function renderFlatpakList(items = [], searching = false) {
+  flatpakList.replaceChildren();
+  if (!items.length) {
+    flatpakList.innerHTML = `<div class="empty-state">${searching
+      ? (currentLanguage === 'en' ? 'No matching apps found.' : 'Подходящие приложения не найдены.')
+      : (currentLanguage === 'en' ? 'No user Flatpak apps installed yet.' : 'Пользовательские Flatpak-приложения пока не установлены.')}</div>`;
+    refreshFocusables(document.activeElement);
+    return;
+  }
+  for (const item of items) {
+    const row = document.createElement('div');
+    row.className = 'system-app-row';
+    row.innerHTML = `
+      <div class="manage-icon" style="--accent:${accentForText(item.id)}"></div>
+      <div class="manage-copy"><strong></strong><span></span></div>
+      <button type="button" class="system-add-button focusable"></button>`;
+    row.querySelector('.manage-icon').textContent = makeInitials(item.name || item.id);
+    row.querySelector('strong').textContent = item.name || item.id;
+    row.querySelector('.manage-copy span').textContent = [item.description, item.version, item.id].filter(Boolean).join(' · ');
+    const action = row.querySelector('button');
+    action.textContent = item.installed
+      ? (currentLanguage === 'en' ? 'Remove' : 'Удалить')
+      : (currentLanguage === 'en' ? 'Install' : 'Установить');
+    action.classList.toggle('delete-button', Boolean(item.installed));
+    action.addEventListener('click', () => item.installed ? requestFlatpakRemoval(item) : installFlatpakItem(item, action));
+    flatpakList.appendChild(row);
+  }
+  refreshFocusables(document.activeElement);
+}
+
+function makeInitials(value) {
+  return String(value || '?').split(/[.\s_-]+/).filter(Boolean).slice(-2).map((part) => part[0]).join('').toUpperCase();
+}
+
+function accentForText(value) {
+  const colors = ['#2563eb', '#7c3aed', '#059669', '#ea580c', '#0f766e', '#475569'];
+  let hash = 0;
+  for (const character of String(value || '')) hash = ((hash * 31) + character.charCodeAt(0)) >>> 0;
+  return colors[hash % colors.length];
+}
+
+async function loadFlatpakCatalog(force = false) {
+  if (flatpakLoading && !force) return;
+  flatpakLoading = true;
+  flatpakStatus.textContent = currentLanguage === 'en' ? 'Reading installed apps…' : 'Читаем установленные приложения…';
+  const result = await window.tv.listFlatpaks();
+  flatpakLoading = false;
+  if (!result?.ok) {
+    flatpakStatus.textContent = result?.message || 'Flatpak error';
+    renderFlatpakList([]);
+    return;
+  }
+  const items = (result.apps || []).map((item) => ({ ...item, installed: true }));
+  flatpakStatus.textContent = currentLanguage === 'en' ? `Installed: ${items.length}` : `Установлено: ${items.length}`;
+  renderFlatpakList(items);
+}
+
+async function searchFlatpakCatalog() {
+  const query = flatpakSearch.value.trim();
+  if (query.length < 2) return showToast(currentLanguage === 'en' ? 'Enter at least two characters' : 'Введите не менее двух символов');
+  flatpakSearchButton.disabled = true;
+  flatpakStatus.textContent = currentLanguage === 'en' ? 'Searching Flathub…' : 'Ищем во Flathub…';
+  const result = await window.tv.searchFlatpaks(query);
+  flatpakSearchButton.disabled = false;
+  if (!result?.ok) {
+    flatpakStatus.textContent = result?.message || 'Flathub error';
+    return showToast(result?.message || 'Flathub error');
+  }
+  flatpakStatus.textContent = currentLanguage === 'en' ? `Found: ${result.apps.length}` : `Найдено: ${result.apps.length}`;
+  renderFlatpakList(result.apps, true);
+}
+
+async function installFlatpakItem(item, button) {
+  button.disabled = true;
+  flatpakStatus.textContent = `${currentLanguage === 'en' ? 'Installing' : 'Устанавливаем'} ${item.name || item.id}…`;
+  const result = await window.tv.installFlatpak(item.id);
+  button.disabled = false;
+  if (!result?.ok) return showToast(result?.message || 'Flatpak error');
+  appsCache = result.apps || appsCache;
+  await renderApps();
+  await loadFlatpakCatalog(true);
+  showToast(currentLanguage === 'en' ? 'App installed and added to Home' : 'Приложение установлено и добавлено на главный экран');
+}
+
+function requestFlatpakRemoval(item) {
+  openConfirm(
+    currentLanguage === 'en' ? `Remove “${item.name || item.id}”?` : `Удалить «${item.name || item.id}»?`,
+    currentLanguage === 'en' ? 'The app tile will also be removed. User data is preserved.' : 'Плитка также будет удалена. Пользовательские данные сохранятся.',
+    currentLanguage === 'en' ? 'Remove' : 'Удалить',
+    async () => {
+      const result = await window.tv.uninstallFlatpak(item.id);
+      closeConfirm();
+      if (!result?.ok) return showToast(result?.message || 'Flatpak error');
+      appsCache = result.apps || appsCache;
+      await renderApps();
+      await loadFlatpakCatalog(true);
+      showToast(currentLanguage === 'en' ? 'App removed' : 'Приложение удалено');
+    },
+    { tone: 'danger', symbol: '−' }
+  );
+}
+
 function renderManageList() {
-  const customApps = appsCache.filter((app) => app.custom);
+  const customApps = appsCache;
   manageList.innerHTML = '';
   if (!customApps.length) {
     manageList.innerHTML = '<div class="empty-state">Вы ещё не добавили собственные приложения.</div>';
@@ -554,13 +728,48 @@ function renderManageList() {
     row.innerHTML = `
       <div class="manage-icon" style="--accent:${app.accent}"></div>
       <div class="manage-copy"><strong></strong><span></span></div>
-      <button class="delete-button focusable">Удалить</button>`;
+      <div class="manage-actions">
+        <button class="compact-action focusable" data-manage-action="kids" title="Детский профиль">${appKidsAllowed(app) ? '👶' : '⊘'}</button>
+        <button class="compact-action focusable" data-manage-action="favorite" title="Избранное">${app.favorite ? '★' : '☆'}</button>
+        <button class="compact-action focusable" data-manage-action="up" title="Выше">↑</button>
+        <button class="compact-action focusable" data-manage-action="down" title="Ниже">↓</button>
+        ${app.custom ? '<button class="delete-button focusable" data-manage-action="delete">Удалить</button>' : ''}
+      </div>`;
     row.querySelector('strong').textContent = app.title;
     renderAppIcon(row.querySelector('.manage-icon'), app);
     row.querySelector('.manage-copy span').textContent = app.type === 'system' ? 'Системное приложение' : app.url;
-    row.querySelector('.delete-button').addEventListener('click', () => requestDelete(app));
+    row.querySelector('[data-manage-action="favorite"]').addEventListener('click', () => changeAppOrder(app, 'favorite'));
+    row.querySelector('[data-manage-action="kids"]').addEventListener('click', () => changeKidsAccess(app));
+    row.querySelector('[data-manage-action="up"]').addEventListener('click', () => changeAppOrder(app, 'up'));
+    row.querySelector('[data-manage-action="down"]').addEventListener('click', () => changeAppOrder(app, 'down'));
+    row.querySelector('[data-manage-action="delete"]')?.addEventListener('click', () => requestDelete(app));
     manageList.appendChild(row);
   }
+}
+
+function appKidsAllowed(app) {
+  if (app.kidsAllowed != null) return Boolean(app.kidsAllowed);
+  return !['settings', 'files'].includes(app.action);
+}
+
+async function changeKidsAccess(app) {
+  const result = await window.tv.setKidsAllowed(app.id, !appKidsAllowed(app));
+  if (!result?.ok) return showToast(result?.message || 'Не удалось изменить детский профиль');
+  appsCache = result.apps;
+  renderManageList();
+  showToast(currentLanguage === 'en' ? 'Kids profile access updated' : 'Доступ детского профиля обновлён');
+  refreshFocusables(manageList.querySelector('[data-manage-action="kids"]'));
+}
+
+async function changeAppOrder(app, action) {
+  const result = action === 'favorite'
+    ? await window.tv.setFavorite(app.id, !app.favorite)
+    : await window.tv.moveApp(app.id, action);
+  if (!result?.ok) return showToast(result?.message || 'Не удалось изменить порядок');
+  appsCache = result.apps;
+  renderManageList();
+  await renderApps();
+  refreshFocusables(manageList.querySelector(`[data-manage-action="${action}"]`));
 }
 
 const settingsCategoryCopy = {
@@ -583,6 +792,7 @@ function showSettingsCategory(category = null, moveFocus = true) {
     const [title, description] = settingsCategoryCopy[activeSettingsCategory][currentLanguage] || settingsCategoryCopy[activeSettingsCategory].ru;
     document.getElementById('manage-title').textContent = title;
     settingsPageDescription.textContent = description;
+    if (activeSettingsCategory === 'apps') loadFlatpakCatalog();
   } else {
     document.getElementById('manage-title').textContent = t('settings');
     settingsPageDescription.textContent = '';
@@ -852,6 +1062,81 @@ function renderPower(power = {}) {
   powerLidDockedAction.value = power.lidDockedAction || 'ignore';
 }
 
+function renderAutologin(state = {}) {
+  const enabled = Boolean(state.ok && state.enabled);
+  shellAutostart.setAttribute('aria-checked', String(enabled));
+  shellAutostartStatus.textContent = enabled
+    ? (currentLanguage === 'en' ? 'Enabled' : 'Включён')
+    : (currentLanguage === 'en' ? 'Disabled' : 'Выключен');
+  shellAutostart.title = state.message || '';
+}
+
+function renderCec(state = {}, preferences = {}) {
+  const enabled = state.enabled !== false;
+  cecToggle.setAttribute('aria-checked', String(enabled));
+  hdmiAudioToggle.setAttribute('aria-checked', String(preferences.autoHdmiAudio !== false));
+  cecStatus.textContent = !enabled
+    ? (currentLanguage === 'en' ? 'Off' : 'Выключен')
+    : state.connected
+      ? (currentLanguage === 'en' ? 'Connected' : 'Подключён')
+      : state.available
+        ? (currentLanguage === 'en' ? 'Searching' : 'Поиск')
+        : (currentLanguage === 'en' ? 'No adapter' : 'Нет адаптера');
+  cecStatus.title = state.message || '';
+}
+
+function renderProfile(preferences = {}) {
+  currentProfile = preferences.activeProfile === 'kids' ? 'kids' : 'main';
+  profileSelect.value = currentProfile;
+  profileStatus.textContent = currentProfile === 'kids'
+    ? (currentLanguage === 'en' ? 'Kids' : 'Детский')
+    : (currentLanguage === 'en' ? 'Main' : 'Основной');
+  parentalCurrentPin.hidden = !preferences.parentalPinSet;
+  parentalCurrentPin.placeholder = currentLanguage === 'en' ? 'Current PIN' : 'Текущий PIN';
+  parentalNewPin.placeholder = currentLanguage === 'en' ? 'New PIN (4–8 digits)' : 'Новый PIN (4–8 цифр)';
+}
+
+function formatDiagnostics(report = {}) {
+  const appInfo = report.app || {};
+  const lines = [
+    `Fedora TV OS ${appInfo.version || '—'} · Electron ${appInfo.electron || '—'} · ${appInfo.arch || '—'}`,
+    `${report.generatedAt || ''}${appInfo.safeMode ? ' · SAFE MODE' : ''}`,
+    ''
+  ];
+  for (const check of report.checks || []) {
+    const firstLine = String(check.output || '').split(/\r?\n/).find(Boolean) || (check.ok ? 'OK' : 'Недоступно');
+    lines.push(`${check.ok ? '✓' : '!' } ${check.name}: ${firstLine.slice(0, 220)}`);
+  }
+  if (report.logs?.crashes) lines.push('', currentLanguage === 'en' ? 'Recent shell crashes are present in the exported report.' : 'В экспортируемом отчёте есть недавние сбои оболочки.');
+  return lines.join('\n');
+}
+
+async function refreshDiagnostics() {
+  diagnosticsRefresh.disabled = true;
+  diagnosticsOutput.textContent = currentLanguage === 'en' ? 'Running checks…' : 'Выполняем проверку…';
+  try {
+    const report = await window.tv.getDiagnostics();
+    diagnosticsOutput.textContent = formatDiagnostics(report);
+  } catch (error) {
+    diagnosticsOutput.textContent = error?.message || 'Diagnostics error';
+  } finally {
+    diagnosticsRefresh.disabled = false;
+    refreshFocusables(diagnosticsRefresh);
+  }
+}
+
+async function finishOnboarding(openSettings = false) {
+  const result = await window.tv.completeOnboarding();
+  if (!result?.ok) return showToast(result?.message || 'Не удалось сохранить настройку');
+  onboarding.hidden = true;
+  if (openSettings) {
+    openManagePanel();
+    showSettingsCategory('connections');
+  } else {
+    refreshFocusables(grid.querySelector('.app-card'));
+  }
+}
+
 function volumeIconMarkup(volume = 0, muted = false) {
   const waves = muted
     ? '<path class="volume-off-line" d="m17 9 5 5m0-5-5 5"/>'
@@ -1031,6 +1316,10 @@ async function loadSystemSettings() {
   renderBluetooth(result.bluetooth);
   renderDisplays(result.displays);
   renderPower(result.power || result.preferences?.power);
+  renderAutologin(result.autologin);
+  renderCec(result.cec, result.preferences);
+  renderProfile(result.preferences);
+  applyAmbientPreference(result.preferences);
 }
 
 function renderKeyboard(preferredAction = null) {
@@ -1234,7 +1523,7 @@ async function renderApps() {
     button.style.setProperty('--card-index', grid.children.length);
     button.style.setProperty('--accent', app.accent || '#334155');
     button.dataset.app = JSON.stringify(app);
-    button.innerHTML = '<span class="icon"></span><span class="title"></span>';
+    button.innerHTML = `<span class="icon"></span><span class="title"></span>${app.favorite ? '<span class="favorite-mark" aria-label="Избранное">★</span>' : ''}`;
     renderAppIcon(button.querySelector('.icon'), app);
     const builtInEnglishTitles = { vkvideo: 'VK Video', browser: 'Browser', files: 'Files', settings: 'Settings' };
     button.querySelector('.title').textContent = currentLanguage === 'en' ? (app.titleEn || builtInEnglishTitles[app.id] || app.title) : app.title;
@@ -1242,14 +1531,16 @@ async function renderApps() {
     makeCardInteractive(button);
     grid.appendChild(button);
   }
-  const addButton = document.createElement('button');
-  addButton.className = 'app-card add-card focusable';
-  addButton.style.setProperty('--card-index', grid.children.length);
-  addButton.dataset.special = 'add';
-  addButton.innerHTML = `<span class="icon">＋</span><span class="title">${t('addApp')}</span>`;
-  addButton.addEventListener('click', () => activate(addButton));
-  makeCardInteractive(addButton);
-  grid.appendChild(addButton);
+  if (currentProfile !== 'kids') {
+    const addButton = document.createElement('button');
+    addButton.className = 'app-card add-card focusable';
+    addButton.style.setProperty('--card-index', grid.children.length);
+    addButton.dataset.special = 'add';
+    addButton.innerHTML = `<span class="icon">＋</span><span class="title">${t('addApp')}</span>`;
+    addButton.addEventListener('click', () => activate(addButton));
+    makeCardInteractive(addButton);
+    grid.appendChild(addButton);
+  }
 }
 
 function makeCardInteractive(card) {
@@ -1270,11 +1561,69 @@ async function loadApps() {
   // запросы к NetworkManager, PipeWire и updater не блокируют первый экран.
   const preferences = await window.tv.getPreferences();
   applyLanguage(preferences?.language);
+  renderProfile(preferences || {});
+  applyAmbientPreference(preferences || {});
+  onboarding.hidden = preferences?.onboardingComplete !== false;
   await renderApps();
   document.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', () => activate(button)));
   document.querySelectorAll('[data-add-close]').forEach((button) => button.addEventListener('click', closeAddPanel));
   document.querySelectorAll('[data-add-mode]').forEach((button) => button.addEventListener('click', () => setAddMode(button.dataset.addMode)));
   systemAppRefresh.addEventListener('click', loadSystemApps);
+  flatpakSearchForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    searchFlatpakCatalog();
+  });
+  flatpakUpdate.addEventListener('click', async () => {
+    flatpakUpdate.disabled = true;
+    flatpakStatus.textContent = currentLanguage === 'en' ? 'Updating Flatpak apps…' : 'Обновляем Flatpak-приложения…';
+    const result = await window.tv.updateFlatpaks();
+    flatpakUpdate.disabled = false;
+    if (!result?.ok) return showToast(result?.message || 'Flatpak error');
+    await loadFlatpakCatalog(true);
+    showToast(currentLanguage === 'en' ? 'Flatpak apps are up to date' : 'Flatpak-приложения обновлены');
+  });
+  onboardingSkip.addEventListener('click', () => finishOnboarding(false));
+  onboardingStart.addEventListener('click', () => finishOnboarding(true));
+  diagnosticsRefresh.addEventListener('click', refreshDiagnostics);
+  diagnosticsExport.addEventListener('click', async () => {
+    diagnosticsExport.disabled = true;
+    const result = await window.tv.exportDiagnostics();
+    diagnosticsExport.disabled = false;
+    if (result?.canceled) return refreshFocusables(diagnosticsExport);
+    if (!result?.ok) return showToast(result?.message || 'Diagnostics export error');
+    showToast(currentLanguage === 'en' ? 'Diagnostics report saved' : 'Диагностический отчёт сохранён');
+    refreshFocusables(diagnosticsExport);
+  });
+  profileApply.addEventListener('click', async () => {
+    profileApply.disabled = true;
+    const result = await window.tv.setProfile(profileSelect.value, profilePin.value);
+    profileApply.disabled = false;
+    profilePin.value = '';
+    if (!result?.ok) return showToast(result?.message || 'Не удалось переключить профиль');
+    renderProfile(result.preferences || { activeProfile: result.profile?.active, parentalPinSet: result.profile?.pinSet });
+    await renderApps();
+    renderManageList();
+    showToast(currentProfile === 'kids'
+      ? (currentLanguage === 'en' ? 'Kids profile enabled' : 'Включён детский профиль')
+      : (currentLanguage === 'en' ? 'Main profile enabled' : 'Включён основной профиль'));
+    refreshFocusables(profileApply);
+  });
+  parentalPinForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const result = await window.tv.setParentalPin({ currentPin: parentalCurrentPin.value, newPin: parentalNewPin.value });
+    if (!result?.ok) return showToast(result?.message || 'Не удалось сохранить PIN');
+    parentalPinForm.reset();
+    parentalCurrentPin.hidden = false;
+    showToast(currentLanguage === 'en' ? 'Parental PIN saved' : 'Родительский PIN сохранён');
+    refreshFocusables(profileApply);
+  });
+  screensaverTimeout.addEventListener('change', async () => {
+    const result = await window.tv.setScreensaverTimeout(Number(screensaverTimeout.value));
+    if (!result?.ok) return showToast(result?.message || 'Не удалось сохранить заставку');
+    applyAmbientPreference(result.preferences);
+    showToast(currentLanguage === 'en' ? 'Screensaver setting saved' : 'Настройка заставки сохранена');
+    refreshFocusables(screensaverTimeout);
+  });
   document.querySelectorAll('[data-manage-close]').forEach((button) => button.addEventListener('click', closeManagePanel));
   document.querySelectorAll('[data-settings-open]').forEach((button) => button.addEventListener('click', () => showSettingsCategory(button.dataset.settingsOpen)));
   settingsBack.addEventListener('click', () => showSettingsCategory(null));
@@ -1437,6 +1786,33 @@ async function loadApps() {
     showToast(currentLanguage === 'en' ? 'Power settings saved' : 'Настройки питания сохранены');
     refreshFocusables(powerApply);
   });
+  shellAutostart.addEventListener('click', async () => {
+    const enabled = shellAutostart.getAttribute('aria-checked') !== 'true';
+    shellAutostart.disabled = true;
+    const result = await window.tv.setAutologin(enabled);
+    shellAutostart.disabled = false;
+    if (!result?.ok) return showToast(result?.message || 'Не удалось изменить автозапуск');
+    renderAutologin(result);
+    showToast(enabled
+      ? (currentLanguage === 'en' ? 'The TV shell will start automatically' : 'Автозапуск оболочки включён')
+      : (currentLanguage === 'en' ? 'The login screen will be shown after restart' : 'После перезагрузки появится экран выбора пользователей'));
+    refreshFocusables(shellAutostart);
+  });
+  cecToggle.addEventListener('click', async () => {
+    cecToggle.disabled = true;
+    const result = await window.tv.setCec(cecToggle.getAttribute('aria-checked') !== 'true');
+    cecToggle.disabled = false;
+    if (!result?.ok) return showToast(result?.message || 'HDMI-CEC error');
+    renderCec(result, { autoHdmiAudio: hdmiAudioToggle.getAttribute('aria-checked') === 'true' });
+    refreshFocusables(cecToggle);
+  });
+  hdmiAudioToggle.addEventListener('click', async () => {
+    const enabled = hdmiAudioToggle.getAttribute('aria-checked') !== 'true';
+    const result = await window.tv.setAutoHdmiAudio(enabled);
+    if (!result?.ok) return showToast(result?.message || 'HDMI audio error');
+    hdmiAudioToggle.setAttribute('aria-checked', String(enabled));
+    refreshFocusables(hdmiAudioToggle);
+  });
   muteToggle.addEventListener('click', async () => {
     const result = await window.tv.toggleMute();
     if (!result?.ok) return showToast(result?.message || 'Audio error');
@@ -1542,7 +1918,7 @@ async function loadApps() {
     await renderApps();
     refreshFocusables(button);
   }));
-  refreshFocusables(grid.querySelector('.app-card'));
+  refreshFocusables(onboarding.hidden ? grid.querySelector('.app-card') : onboardingStart);
   Promise.allSettled([
     initializeBackground(),
     initializeUpdater(),
@@ -1622,6 +1998,7 @@ async function handleInputAction(action) {
   if (action === 'select') return document.activeElement?.classList.contains('focusable') && document.activeElement.click();
   if (action === 'back') {
     if (keyboardOpen) return setKeyboardVisible(false);
+    if (!onboarding.hidden) return;
     if (!backdrop.hidden) return closeConfirm();
     if (!quickPanel.hidden) return closeQuickPanel();
     if (!addBackdrop.hidden) return closeAddPanel();
@@ -1649,6 +2026,12 @@ async function handleInputAction(action) {
 }
 
 document.addEventListener('keydown', (event) => {
+  if (hideScreensaver()) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    return;
+  }
+  resetAmbientTimer();
   if (event.key === 'F11') {
     event.preventDefault();
     window.tv.toggleFullscreen();
@@ -1703,6 +2086,12 @@ function pollGamepads(timestamp) {
     if (pad.buttons[1]?.pressed) actions.add('back');
     if (pad.buttons[9]?.pressed) actions.add('menu');
     if (pad.buttons[16]?.pressed) actions.add('home');
+    if (!screensaver.hidden && actions.size) {
+      hideScreensaver();
+      previous.pressed = actions;
+      gamepadState.set(pad.index, previous);
+      continue;
+    }
     for (const action of actions) {
       const repeatable = ['left', 'right', 'up', 'down'].includes(action);
       const deadline = previous.repeats.get(action) || 0;
@@ -1718,8 +2107,19 @@ function pollGamepads(timestamp) {
 }
 
 document.addEventListener('mousemove', () => document.querySelectorAll('.focused').forEach((el) => el.classList.remove('focused')));
+document.addEventListener('pointerdown', () => { hideScreensaver(); resetAmbientTimer(); }, { capture: true });
+document.addEventListener('visibilitychange', resetAmbientTimer);
 window.tv.onHomeRequested(() => { closeAllOverlays(); refreshFocusables(); });
 window.tv.onBrowserToolbarRequested(() => refreshFocusables(0));
+window.tv.onHardwareChanged(async () => {
+  const result = await window.tv.getSettings();
+  if (!result?.ok) return;
+  renderAudio(result.audio);
+  renderDisplays(result.displays);
+  renderCec(result.cec, result.preferences);
+  if (!manageBackdrop.hidden) refreshFocusables(document.activeElement);
+  showToast(currentLanguage === 'en' ? 'Display or audio connection changed' : 'Изменилось подключение дисплея или звука');
+});
 window.tv.onSystemActionRequested((action) => requestSystemAction(action));
 window.tv.onBrowserState(renderBrowserState);
 window.tv.onUpdateState(renderUpdateState);

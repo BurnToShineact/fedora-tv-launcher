@@ -38,11 +38,34 @@ jobs:
           TAG_VERSION="${GITHUB_REF_NAME#v}"
           test "$PACKAGE_VERSION" = "$TAG_VERSION"
 
-      - name: Build and publish RPM with update metadata
+      - name: Build RPM
+        if: startsWith(github.ref, 'refs/tags/')
+        run: npm run release:github
+
+      - name: Sign RPM and refresh update metadata
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RPM_SIGNING_PRIVATE_KEY: ${{ secrets.RPM_SIGNING_PRIVATE_KEY }}
+        run: |
+          test -n "$RPM_SIGNING_PRIVATE_KEY"
+          export GNUPGHOME="$RUNNER_TEMP/fedora-tv-os-gnupg"
+          install -d -m 0700 "$GNUPGHOME"
+          printf '%s' "$RPM_SIGNING_PRIVATE_KEY" | gpg --batch --import
+          KEY_FINGERPRINT=$(gpg --batch --with-colons --list-secret-keys | awk -F: '$1 == "fpr" { print $10; exit }')
+          test -n "$KEY_FINGERPRINT"
+          rpmsign --define "_gpg_name $KEY_FINGERPRINT" --define "_gpg_path $GNUPGHOME" --addsign dist/*.rpm
+          VERIFY_DB="$RUNNER_TEMP/fedora-tv-os-rpmdb"
+          install -d -m 0700 "$VERIFY_DB"
+          rpmkeys --dbpath "$VERIFY_DB" --import packaging/fedora-tv-os-release.asc
+          rpmkeys --dbpath "$VERIFY_DB" --checksig --verbose dist/*.rpm | tee /tmp/rpm-signature.txt
+          grep -qi 'Signature.*: OK' /tmp/rpm-signature.txt
+          npm run release:metadata
+
+      - name: Publish GitHub release
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run release:github
+        run: gh release create "$GITHUB_REF_NAME" dist/*.rpm dist/latest-linux.yml --verify-tag --generate-notes
 
       - name: Build RPM without publishing
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}

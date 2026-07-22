@@ -6,54 +6,152 @@ if [[ ${EUID} -ne 0 ]]; then
   exit 77
 fi
 
-if [[ ${1:-} != power || $# -ne 5 ]]; then
-  printf 'Недопустимая команда системных настроек.\n' >&2
-  exit 64
-fi
+COMMAND=${1:-}
 
-POWER_ACTION=$2
-LID_ACTION=$3
-LID_EXTERNAL_ACTION=$4
-LID_DOCKED_ACTION=$5
+apply_power_settings() {
+  if [[ $# -ne 4 ]]; then
+    printf 'Недопустимое число параметров настроек питания.\n' >&2
+    exit 64
+  fi
 
-case "$POWER_ACTION" in
-  ask|poweroff|suspend|ignore) ;;
-  *) printf 'Недопустимое действие кнопки питания.\n' >&2; exit 64 ;;
-esac
+  local power_action=$1
+  local lid_action=$2
+  local lid_external_action=$3
+  local lid_docked_action=$4
+  local action
 
-for ACTION in "$LID_ACTION" "$LID_EXTERNAL_ACTION" "$LID_DOCKED_ACTION"; do
-  case "$ACTION" in
-    suspend|poweroff|ignore) ;;
-    *) printf 'Недопустимое действие крышки.\n' >&2; exit 64 ;;
+  case "$power_action" in
+    ask|poweroff|suspend|ignore) ;;
+    *) printf 'Недопустимое действие кнопки питания.\n' >&2; exit 64 ;;
   esac
-done
+  for action in "$lid_action" "$lid_external_action" "$lid_docked_action"; do
+    case "$action" in
+      suspend|poweroff|ignore) ;;
+      *) printf 'Недопустимое действие крышки.\n' >&2; exit 64 ;;
+    esac
+  done
 
-# В режиме ask обработку короткого нажатия берёт на себя labwc: оболочка
-# показывает собственное подтверждение вместо немедленного выключения.
-LOGIND_POWER_ACTION=$POWER_ACTION
-if [[ $POWER_ACTION == ask ]]; then
-  LOGIND_POWER_ACTION=ignore
-fi
+  # В режиме ask обработку короткого нажатия берёт на себя labwc: оболочка
+  # показывает собственное подтверждение вместо немедленного выключения.
+  local logind_power_action=$power_action
+  if [[ $power_action == ask ]]; then
+    logind_power_action=ignore
+  fi
 
-CONFIG_DIR=/etc/systemd/logind.conf.d
-CONFIG_PATH="$CONFIG_DIR/90-fedora-tv-os.conf"
-TEMP_PATH=$(mktemp /tmp/fedora-tv-logind.XXXXXX)
-trap 'rm -f "$TEMP_PATH"' EXIT
+  local config_dir=/etc/systemd/logind.conf.d
+  local config_path="$config_dir/90-fedora-tv-os.conf"
+  local temp_path
+  temp_path=$(mktemp /tmp/fedora-tv-logind.XXXXXX)
+  trap 'rm -f "$temp_path"' RETURN
 
-{
-  printf '[Login]\n'
-  printf 'HandlePowerKey=%s\n' "$LOGIND_POWER_ACTION"
-  printf 'HandleLidSwitch=%s\n' "$LID_ACTION"
-  printf 'HandleLidSwitchExternalPower=%s\n' "$LID_EXTERNAL_ACTION"
-  printf 'HandleLidSwitchDocked=%s\n' "$LID_DOCKED_ACTION"
-} > "$TEMP_PATH"
+  {
+    printf '[Login]\n'
+    printf 'HandlePowerKey=%s\n' "$logind_power_action"
+    printf 'HandleLidSwitch=%s\n' "$lid_action"
+    printf 'HandleLidSwitchExternalPower=%s\n' "$lid_external_action"
+    printf 'HandleLidSwitchDocked=%s\n' "$lid_docked_action"
+  } > "$temp_path"
 
-install -d -m 0755 "$CONFIG_DIR"
-install -m 0644 "$TEMP_PATH" "$CONFIG_PATH"
+  install -d -m 0755 "$config_dir"
+  install -m 0644 "$temp_path" "$config_path"
+  if ! systemctl reload systemd-logind.service; then
+    systemctl kill --kill-whom=main --signal=HUP systemd-logind.service
+  fi
+  printf 'Настройки питания применены.\n'
+}
 
-# SIGHUP перечитывает logind.conf без перезапуска пользовательских сессий.
-if ! systemctl reload systemd-logind.service; then
-  systemctl kill --kill-whom=main --signal=HUP systemd-logind.service
-fi
+rewrite_gdm_autologin() {
+  if [[ $# -ne 2 ]]; then
+    printf 'Недопустимое число параметров автоматического входа.\n' >&2
+    exit 64
+  fi
 
-printf 'Настройки питания применены.\n'
+  local mode=$1
+  local user_name=$2
+  local config_path=/etc/gdm/custom.conf
+  local config_dir=/etc/gdm
+  local state_dir=/var/lib/fedora-tv-os
+  local state_path="$state_dir/autologin-user"
+  local source_path=$config_path
+  local empty_source
+  local temp_path
+
+  case "$mode" in enable|disable) ;; *) printf 'Недопустимый режим автоматического входа.\n' >&2; exit 64 ;; esac
+  if [[ ! "$user_name" =~ ^[a-z_][a-z0-9_-]{0,30}$ ]] || ! id "$user_name" >/dev/null 2>&1; then
+    printf 'Недопустимый пользователь автоматического входа.\n' >&2
+    exit 64
+  fi
+  if [[ $(id -u "$user_name") -lt 1000 ]]; then
+    printf 'Системную учётную запись нельзя использовать для автоматического входа.\n' >&2
+    exit 64
+  fi
+  if [[ $mode == enable && ! -f /usr/share/wayland-sessions/fedora-tv-os.desktop ]]; then
+    printf 'TV-сессия не зарегистрирована.\n' >&2
+    exit 69
+  fi
+
+  install -d -m 0755 "$config_dir" "$state_dir"
+  empty_source=$(mktemp /tmp/fedora-tv-gdm-source.XXXXXX)
+  temp_path=$(mktemp /tmp/fedora-tv-gdm.XXXXXX)
+  trap 'rm -f "$empty_source" "$temp_path"' RETURN
+  : > "$empty_source"
+  if [[ ! -f "$source_path" ]]; then source_path=$empty_source; fi
+
+  awk -v mode="$mode" -v user_name="$user_name" '
+    function emit_autologin() {
+      if (emitted || mode != "enable") return
+      print "AutomaticLoginEnable=True"
+      print "AutomaticLogin=" user_name
+      emitted=1
+    }
+    BEGIN { in_daemon=0; daemon_seen=0; emitted=0 }
+    /^[[:space:]]*\[daemon\][[:space:]]*$/ {
+      if (in_daemon) emit_autologin()
+      in_daemon=1
+      daemon_seen=1
+      print
+      next
+    }
+    /^[[:space:]]*\[/ {
+      if (in_daemon) emit_autologin()
+      in_daemon=0
+      print
+      next
+    }
+    in_daemon && /^[[:space:]]*AutomaticLogin(Enable)?[[:space:]]*=/ { next }
+    { print }
+    END {
+      if (in_daemon) emit_autologin()
+      else if (!daemon_seen && mode == "enable") {
+        print ""
+        print "[daemon]"
+        emit_autologin()
+      }
+    }
+  ' "$source_path" > "$temp_path"
+
+  install -m 0644 "$temp_path" "$config_path"
+  if [[ $mode == enable ]]; then
+    printf '%s\n' "$user_name" > "$state_path"
+    chmod 0644 "$state_path"
+    printf 'Автоматический запуск TV-сессии включён для %s.\n' "$user_name"
+  else
+    rm -f "$state_path"
+    printf 'Автоматический запуск TV-сессии выключен.\n'
+  fi
+}
+
+case "$COMMAND" in
+  power)
+    shift
+    apply_power_settings "$@"
+    ;;
+  autologin)
+    shift
+    rewrite_gdm_autologin "$@"
+    ;;
+  *)
+    printf 'Недопустимая команда системных настроек.\n' >&2
+    exit 64
+    ;;
+esac

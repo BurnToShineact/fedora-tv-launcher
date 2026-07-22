@@ -230,6 +230,16 @@
           <button class="dialog-button focusable" id="update-install" hidden>Перезапустить и обновить</button>
         </div>
       </section>
+      <section class="settings-section" data-settings-category="system" data-nav-zone="settings-autostart" data-nav-order="3" hidden>
+        <div class="settings-heading">
+          <div><p class="eyebrow" data-i18n="startupGroup">Запуск</p><h3 data-i18n="startupTitle">Автозапуск оболочки</h3></div>
+          <span class="version-badge" id="shell-autostart-status">—</span>
+        </div>
+        <div class="setting-switch-row">
+          <div><strong data-i18n="startupEnabled">Сразу открывать Fedora TV OS после включения</strong><span data-i18n="startupDescription">Без ввода пароля и экрана выбора пользователей. Выключение вернёт обычный экран GDM после следующей загрузки.</span></div>
+          <button class="switch focusable" id="shell-autostart" type="button" role="switch" aria-checked="false"><span></span></button>
+        </div>
+      </section>
       <section class="settings-section" data-settings-category="picture" data-nav-zone="settings-display" data-nav-order="2" hidden>
         <div class="settings-heading">
           <div><p class="eyebrow" data-i18n="displayGroup">Изображение</p><h3 data-i18n="displayTitle">Дисплеи</h3></div>
@@ -296,7 +306,21 @@
         <div class="update-actions settings-actions"><button class="dialog-button secondary focusable" id="bluetooth-scan" type="button" data-i18n="findDevices">Найти устройства</button></div>
         <div class="bluetooth-list" id="bluetooth-list" aria-live="polite"></div>
       </section>
-      <section class="settings-section" data-settings-category="system" data-nav-zone="settings-power" data-nav-order="3" hidden>
+      <section class="settings-section" data-settings-category="connections" data-nav-zone="settings-cec" data-nav-order="4" hidden>
+        <div class="settings-heading">
+          <div><p class="eyebrow">HDMI</p><h3 data-i18n="cecTitle">Пульт телевизора и звук</h3></div>
+          <span class="version-badge" id="cec-status">—</span>
+        </div>
+        <div class="setting-switch-row">
+          <div><strong data-i18n="cecEnabled">Управление через HDMI-CEC</strong><span data-i18n="cecDescription">Кнопки пульта телевизора управляют оболочкой при наличии CEC-адаптера.</span></div>
+          <button class="switch focusable" id="cec-toggle" type="button" role="switch" aria-checked="true"><span></span></button>
+        </div>
+        <div class="setting-switch-row">
+          <div><strong data-i18n="autoHdmiAudio">Автоматически выбирать звук HDMI</strong><span data-i18n="autoHdmiAudioDescription">При подключении телевизора переключать звук на HDMI или DisplayPort.</span></div>
+          <button class="switch focusable" id="hdmi-audio-toggle" type="button" role="switch" aria-checked="true"><span></span></button>
+        </div>
+      </section>
+      <section class="settings-section" data-settings-category="system" data-nav-zone="settings-power" data-nav-order="4" hidden>
         <div class="settings-heading"><div><p class="eyebrow" data-i18n="powerGroup">Питание</p><h3 data-i18n="powerTitle">Сон, крышка и кнопки</h3></div></div>
         <p class="panel-description" data-i18n="powerDescription">Таймер сна действует в TV-сессии. Крышка и физическая кнопка питания настраиваются для всего устройства после системного подтверждения.</p>
         <div class="system-settings-grid power-grid">
@@ -317,6 +341,32 @@
           </select></label>
         </div>
         <div class="update-actions settings-actions"><button class="dialog-button focusable" id="power-apply" data-i18n="applyPower">Сохранить настройки питания</button></div>
+      </section>
+      <section class="settings-section" data-settings-category="system" data-nav-zone="settings-diagnostics" data-nav-order="5" hidden>
+        <div class="settings-heading"><div><p class="eyebrow" data-i18n="diagnosticsGroup">Поддержка</p><h3 data-i18n="diagnosticsTitle">Диагностика</h3></div></div>
+        <p class="panel-description" data-i18n="diagnosticsDescription">Проверка видео, звука, сети, Bluetooth, Flatpak и журналов оболочки.</p>
+        <div class="update-actions settings-actions">
+          <button class="dialog-button secondary focusable" id="diagnostics-refresh" type="button" data-i18n="runDiagnostics">Проверить</button>
+          <button class="dialog-button focusable" id="diagnostics-export" type="button" data-i18n="exportDiagnostics">Сохранить отчёт</button>
+        </div>
+        <pre class="diagnostics-output" id="diagnostics-output">Диагностика ещё не запускалась.</pre>
+      </section>
+      <section class="settings-section" data-settings-category="system" data-nav-zone="settings-profiles" data-nav-order="6" hidden>
+        <div class="settings-heading">
+          <div><p class="eyebrow" data-i18n="profilesGroup">Доступ</p><h3 data-i18n="profilesTitle">Профили и родительский PIN</h3></div>
+          <span class="version-badge" id="profile-status">Основной</span>
+        </div>
+        <p class="panel-description" data-i18n="profilesDescription">В детском профиле скрыты настройки, файлы и отмеченные вами приложения.</p>
+        <div class="system-settings-grid">
+          <label class="system-field"><span data-i18n="activeProfile">Активный профиль</span><select class="focusable" id="profile-select"><option value="main" data-i18n="mainProfile">Основной</option><option value="kids" data-i18n="kidsProfile">Детский</option></select></label>
+          <label class="system-field"><span data-i18n="parentalPin">Текущий PIN</span><input class="focusable" id="profile-pin" type="password" inputmode="numeric" maxlength="8" autocomplete="off"></label>
+        </div>
+        <div class="update-actions settings-actions"><button class="dialog-button focusable" id="profile-apply" type="button" data-i18n="switchProfile">Переключить профиль</button></div>
+        <form class="pin-toolbar" id="parental-pin-form">
+          <input class="focusable" id="parental-current-pin" type="password" inputmode="numeric" maxlength="8" placeholder="Текущий PIN" autocomplete="off">
+          <input class="focusable" id="parental-new-pin" type="password" inputmode="numeric" minlength="4" maxlength="8" placeholder="Новый PIN (4–8 цифр)" autocomplete="off">
+          <button class="dialog-button secondary focusable" type="submit" data-i18n="savePin">Сохранить PIN</button>
+        </form>
       </section>
       <section class="settings-section" data-settings-category="input" data-nav-zone="settings-language" data-nav-order="2" hidden>
         <div class="settings-heading"><div><p class="eyebrow" data-i18n="languageGroup">Язык</p><h3 data-i18n="languageTitle">Язык интерфейса</h3></div></div>
@@ -345,10 +395,28 @@
           </div>
         </div>
       </section>
+      <section class="settings-section" data-settings-category="appearance" data-nav-zone="settings-screensaver" data-nav-order="3" hidden>
+        <div class="settings-heading"><div><p class="eyebrow" data-i18n="screensaverGroup">Экран</p><h3 data-i18n="screensaverTitle">Заставка с часами</h3></div></div>
+        <p class="panel-description" data-i18n="screensaverDescription">Показывается только на домашнем экране; видео и открытые приложения не прерываются.</p>
+        <label class="system-field"><span data-i18n="screensaverAfter">Включать после</span><select class="focusable" id="screensaver-timeout"><option value="0" data-i18n="never">Никогда</option><option value="1">1 мин</option><option value="5">5 мин</option><option value="10">10 мин</option><option value="20">20 мин</option><option value="30">30 мин</option></select></label>
+      </section>
       <section class="settings-section" data-settings-category="apps" data-nav-zone="settings-apps" data-nav-order="2" hidden>
         <div class="settings-heading"><div><p class="eyebrow" data-i18n="apps">Приложения</p><h3 data-i18n="myApps">Мои приложения</h3></div></div>
         <p class="panel-description">Здесь можно удалить добавленные вами сайты и системные приложения. Встроенные плитки защищены.</p>
         <div class="manage-list" id="manage-list"></div>
+      </section>
+      <section class="settings-section" data-settings-category="apps" data-nav-zone="settings-flatpak" data-nav-order="3" hidden>
+        <div class="settings-heading">
+          <div><p class="eyebrow">Flathub</p><h3 data-i18n="flatpakCatalog">Каталог приложений</h3></div>
+          <button class="dialog-button secondary focusable" id="flatpak-update" type="button" data-i18n="updateAllApps">Обновить все</button>
+        </div>
+        <p class="panel-description" data-i18n="flatpakDescription">Установка выполняется только для TV-пользователя и не требует прав администратора.</p>
+        <form class="flatpak-toolbar" id="flatpak-search-form">
+          <input class="focusable" id="flatpak-search" type="search" minlength="2" maxlength="80" placeholder="Kodi, VLC, Spotify…" autocomplete="off">
+          <button class="dialog-button focusable" id="flatpak-search-button" type="submit" data-i18n="searchApps">Найти</button>
+        </form>
+        <p class="update-message" id="flatpak-status">Установленные приложения</p>
+        <div class="system-app-list flatpak-list" id="flatpak-list" aria-live="polite"></div>
       </section>
       <div class="panel-actions" data-nav-zone="settings-done" data-nav-order="10"><button class="dialog-button focusable" data-manage-close data-i18n="done">Готово</button></div>
     </section>
@@ -368,6 +436,31 @@
       <div class="files-list" id="files-list" data-nav-zone="files-list" data-nav-order="2" aria-live="polite"></div>
       <p class="files-hint" data-i18n="filesHint">Выберите папку для перехода или файл, чтобы открыть его в подходящем приложении.</p>
     </section>
+  </div>
+
+  <div class="onboarding-backdrop" id="onboarding" hidden>
+    <section class="onboarding-card" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+      <div class="brand-mark">F</div>
+      <p class="eyebrow">Fedora TV OS</p>
+      <h1 id="onboarding-title" data-i18n="welcomeTitle">Добро пожаловать</h1>
+      <p data-i18n="welcomeDescription">Настроим сеть, звук и телевизор. После этого всё управление будет доступно с пульта.</p>
+      <div class="onboarding-features">
+        <span><b>1</b><strong data-i18n="welcomeNetwork">Подключение к Wi‑Fi</strong></span>
+        <span><b>2</b><strong data-i18n="welcomeSound">Проверка звука и экрана</strong></span>
+        <span><b>3</b><strong data-i18n="welcomeApps">Установка приложений</strong></span>
+      </div>
+      <div class="panel-actions">
+        <button class="dialog-button secondary focusable" id="onboarding-skip" type="button" data-i18n="skipSetup">Пропустить</button>
+        <button class="dialog-button focusable" id="onboarding-start" type="button" data-i18n="startSetup">Начать настройку</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="screensaver" id="screensaver" aria-hidden="true" hidden>
+    <div class="screensaver-orb"></div>
+    <strong id="screensaver-clock">00:00</strong>
+    <span id="screensaver-date"></span>
+    <small>Fedora TV OS</small>
   </div>
 
   <section class="onscreen-keyboard" id="onscreen-keyboard" aria-label="Экранная клавиатура" hidden>

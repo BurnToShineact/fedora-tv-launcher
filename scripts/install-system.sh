@@ -9,6 +9,8 @@ usage() {
 Параметры:
   --password-stdin    прочитать пароль из первой строки стандартного ввода
   --reset-password   запросить и заменить пароль существующего пользователя
+  --no-autologin     оставить экран выбора пользователей GDM
+  --allow-unsigned   разрешить только локальную тестовую сборку без RPM-подписи
   --skip-repositories не подключать RPM Fusion, Cisco OpenH264 и Flathub
   --skip-codecs      не устанавливать мультимедийные кодеки и VA-API-драйверы
   -h, --help          показать эту справку
@@ -23,6 +25,8 @@ TV_USER_WAS_SET=0
 PASSWORD_OPTION=''
 INSTALL_REPOSITORIES=1
 INSTALL_CODECS=1
+ENABLE_AUTOLOGIN=1
+ALLOW_UNSIGNED=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -45,6 +49,12 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-codecs)
       INSTALL_CODECS=0
+      ;;
+    --no-autologin)
+      ENABLE_AUTOLOGIN=0
+      ;;
+    --allow-unsigned)
+      ALLOW_UNSIGNED=1
       ;;
     -h|--help)
       usage
@@ -123,13 +133,23 @@ PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT_DIR="$PROJECT_DIR/scripts"
 VERSION="$(node -p 'require(process.argv[1]).version' "$PROJECT_DIR/package.json")"
 RPM_FILE="$PROJECT_DIR/dist/fedora-tv-os-${VERSION}-x86_64.rpm"
+RELEASE_KEY="$PROJECT_DIR/packaging/fedora-tv-os-release.asc"
 
 if [[ ! -f "$RPM_FILE" ]]; then
   printf 'Сначала соберите RPM командой: ./scripts/build.sh\n' >&2
   exit 1
 fi
 
-/usr/bin/dnf install -y labwc wlrctl wlr-randr flatpak polkit lxqt-policykit "$RPM_FILE"
+if [[ $ALLOW_UNSIGNED -eq 0 && -f "$RELEASE_KEY" ]]; then
+  /usr/bin/rpmkeys --import "$RELEASE_KEY"
+fi
+
+if [[ $ALLOW_UNSIGNED -eq 1 ]]; then
+  printf 'ВНИМАНИЕ: устанавливается неподписанная локальная тестовая сборка.\n' >&2
+  /usr/bin/dnf install -y --setopt=localpkg_gpgcheck=False labwc wlrctl wlr-randr flatpak polkit lxqt-policykit libcec "$RPM_FILE"
+else
+  /usr/bin/dnf install -y --setopt=localpkg_gpgcheck=True labwc wlrctl wlr-randr flatpak polkit lxqt-policykit libcec "$RPM_FILE"
+fi
 
 if [[ ! -x /usr/libexec/fedora-tv-os-session || ! -f /usr/share/wayland-sessions/fedora-tv-os.desktop ]]; then
   printf 'RPM установлен, но Wayland-сессия не зарегистрирована. Проверьте журнал установки пакета.\n' >&2
@@ -170,9 +190,16 @@ fi
 /usr/bin/busctl --system call org.freedesktop.Accounts "$ACCOUNTS_PATH" \
   org.freedesktop.Accounts.User SetSessionType s wayland >/dev/null
 
+if [[ $ENABLE_AUTOLOGIN -eq 1 ]]; then
+  /usr/libexec/fedora-tv-os-system-settings autologin enable "$TV_USER"
+fi
+
 printf '\nFedora TV OS установлена и назначена основной оболочкой пользователя %s.\n' "$TV_USER"
 printf 'Полностью завершите уже открытый сеанс %s, затем войдите снова.\n' "$TV_USER"
+if [[ $ENABLE_AUTOLOGIN -eq 1 ]]; then
+  printf 'При следующем включении TV-сессия запустится автоматически без экрана выбора пользователей.\n'
+fi
 if [[ $INSTALL_REPOSITORIES -eq 1 && $INSTALL_CODECS -eq 1 ]]; then
   printf 'RPM Fusion, OpenH264, Flathub и мультимедийные кодеки готовы.\n'
 fi
-printf 'GNOME пользователя vadim не изменён. Автоматический вход намеренно не включён.\n'
+printf 'Другие пользователи и их GNOME-сессии не изменены.\n'

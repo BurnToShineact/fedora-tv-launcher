@@ -3,6 +3,7 @@ set -eu
 
 APP_DIR='/opt/Fedora TV OS'
 SESSION_SOURCE="$APP_DIR/resources/tv-session"
+RELEASE_KEY_SOURCE="$APP_DIR/resources/release-key.asc"
 
 # electron-builder normally creates this launcher link in its default hook.
 if command -v update-alternatives >/dev/null 2>&1; then
@@ -29,15 +30,20 @@ install -Dm755 "$SESSION_SOURCE/fedora-tv-os-home" /usr/libexec/fedora-tv-os-hom
 install -Dm755 "$SESSION_SOURCE/fedora-tv-os-logout" /usr/libexec/fedora-tv-os-logout
 install -Dm755 "$SESSION_SOURCE/fedora-tv-os-system-settings" /usr/libexec/fedora-tv-os-system-settings
 install -Dm644 "$SESSION_SOURCE/fedora-tv-os.desktop" /usr/share/wayland-sessions/fedora-tv-os.desktop
+install -Dm644 "$SESSION_SOURCE/os.fedoratv.system-settings.policy" /usr/share/polkit-1/actions/os.fedoratv.system-settings.policy
 install -Dm644 "$SESSION_SOURCE/labwc/rc.xml" /etc/fedora-tv-os/labwc/rc.xml
 install -Dm644 "$SESSION_SOURCE/labwc/environment" /etc/fedora-tv-os/labwc/environment
 install -Dm644 "$SESSION_SOURCE/labwc/menu.xml" /etc/fedora-tv-os/labwc/menu.xml
 install -Dm644 "$SESSION_SOURCE/labwc/themerc-override" /etc/fedora-tv-os/labwc/themerc-override
+if [ -f "$RELEASE_KEY_SOURCE" ]; then
+  install -Dm644 "$RELEASE_KEY_SOURCE" /etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-tv-os
+  rpmkeys --import /etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-tv-os
+fi
 
 if command -v restorecon >/dev/null 2>&1; then
   restorecon -RF /usr/libexec/fedora-tv-os-session /usr/libexec/fedora-tv-os-startup /usr/libexec/fedora-tv-os-home \
     /usr/libexec/fedora-tv-os-logout /usr/libexec/fedora-tv-os-system-settings /usr/share/wayland-sessions/fedora-tv-os.desktop \
-    /etc/fedora-tv-os || true
+    /usr/share/polkit-1/actions/os.fedoratv.system-settings.policy /etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-tv-os /etc/fedora-tv-os || true
 fi
 
 if command -v update-desktop-database >/dev/null 2>&1; then
