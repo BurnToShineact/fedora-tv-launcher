@@ -40,6 +40,32 @@ function isSecureWebUrl(value) {
   }
 }
 
+function contentProviderForUrl(value) {
+  try {
+    const hostname = new URL(value).hostname.toLowerCase().replace(/^www\./, '');
+    if (hostname === 'youtu.be' || hostname === 'youtube.com' || hostname.endsWith('.youtube.com')) return 'youtube';
+    if (hostname === 'vkvideo.ru' || hostname.endsWith('.vkvideo.ru')) return 'vkvideo';
+    if (hostname === 'rutube.ru' || hostname.endsWith('.rutube.ru')) return 'rutube';
+    if (hostname === 'twitch.tv' || hostname.endsWith('.twitch.tv')) return 'twitch';
+    if (hostname === 'google.com' || hostname.endsWith('.google.com')) return 'browser';
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function buildContentSearchUrl(appUrl, query) {
+  const provider = contentProviderForUrl(appUrl);
+  const search = String(query || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+  if (!provider || !search) return '';
+  const encoded = encodeURIComponent(search);
+  if (provider === 'youtube') return `https://www.youtube.com/results?search_query=${encoded}`;
+  if (provider === 'vkvideo') return `https://vkvideo.ru/search?q=${encoded}`;
+  if (provider === 'rutube') return `https://rutube.ru/search/?query=${encoded}`;
+  if (provider === 'twitch') return `https://www.twitch.tv/search?term=${encoded}`;
+  return `https://www.google.com/search?q=${encoded}`;
+}
+
 function normalizeWeatherCity(value) {
   const city = String(value || '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim();
   if (city.length < 2 || city.length > 64) return '';
@@ -192,8 +218,10 @@ function validatePowerSettings(candidate = {}, defaults = POWER_DEFAULTS) {
 
 module.exports = {
   POWER_DEFAULTS,
+  buildContentSearchUrl,
   cleanBrowserUserAgent,
   commandResult,
+  contentProviderForUrl,
   fileKind,
   isInsideFileBrowserRoots,
   isSecureWebUrl,

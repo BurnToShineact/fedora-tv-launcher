@@ -7,8 +7,10 @@ const { execFile, spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 const {
   POWER_DEFAULTS,
+  buildContentSearchUrl,
   cleanBrowserUserAgent,
   commandResult,
+  contentProviderForUrl,
   fileKind,
   isInsideFileBrowserRoots,
   isSecureWebUrl,
@@ -26,6 +28,8 @@ const {
 
 let mainWindow;
 let browserView;
+const browserSessions = new Map();
+let activeBrowserAppId = null;
 let browserVisible = false;
 let keyboardVisible = false;
 let browserFullscreen = false;
@@ -57,6 +61,40 @@ const WEB_PARTITION = 'persist:fedora-tv';
 const SYSTEM_COMMAND_ENV = { ...process.env, LC_ALL: 'C', LANG: 'C' };
 const DEFAULT_WEATHER_CITY = 'Москва';
 const WEATHER_CACHE_MAX_AGE = 15 * 60 * 1000;
+const CONTENT_IDEAS = Object.freeze({
+  film: {
+    ru: [
+      ['Кино на вечер', 'полнометражный фильм на вечер смотреть легально'],
+      ['Документальный фильм', 'интересный документальный фильм смотреть'],
+      ['Семейное кино', 'семейный фильм полный фильм'],
+      ['Киноклассика', 'классический фильм полный фильм'],
+      ['Короткометражное кино', 'лучший короткометражный фильм']
+    ],
+    en: [
+      ['Movie night', 'full length movie to watch legally'],
+      ['Documentary', 'interesting full documentary film'],
+      ['Family movie', 'family movie full film'],
+      ['Cinema classic', 'classic full movie'],
+      ['Short film', 'award winning short film']
+    ]
+  },
+  video: {
+    ru: [
+      ['Научпоп', 'интересный научно популярный ролик'],
+      ['Путешествия', 'лучшие путешествия 4K видео'],
+      ['Технологии', 'новые технологии будущего ролик'],
+      ['История', 'интересный исторический ролик'],
+      ['Юмор', 'лучшие юмористические ролики']
+    ],
+    en: [
+      ['Science', 'interesting popular science video'],
+      ['Travel', 'best travel video 4K'],
+      ['Technology', 'future technology video'],
+      ['History', 'interesting history video'],
+      ['Comedy', 'best comedy videos']
+    ]
+  }
+});
 
 if (safeMode) app.disableHardwareAcceleration();
 
@@ -928,10 +966,34 @@ function configureWebSession(webSession) {
   return userAgent;
 }
 
+function activeWebApps() {
+  return [...browserSessions.entries()]
+    .map(([id, entry]) => ({
+      id,
+      title: entry.app.title,
+      titleEn: entry.app.titleEn || '',
+      icon: entry.app.icon || '',
+      iconPath: entry.app.iconPath || '',
+      iconDataUrl: entry.app.iconDataUrl || '',
+      accent: entry.app.accent || '#334155',
+      pageTitle: entry.view.webContents.isDestroyed() ? '' : entry.view.webContents.getTitle(),
+      url: entry.view.webContents.isDestroyed() ? '' : entry.view.webContents.getURL(),
+      active: id === activeBrowserAppId && browserVisible,
+      lastActiveAt: entry.lastActiveAt
+    }))
+    .sort((a, b) => b.lastActiveAt - a.lastActiveAt);
+}
+
+function sendActiveApps() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('active-apps:changed', activeWebApps());
+}
+
 function sendBrowserState(extra = {}) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.webContents.send('browser:state', {
     visible: browserVisible,
+    appId: activeBrowserAppId,
     fullscreen: browserFullscreen,
     canGoBack: Boolean(browserView?.webContents.navigationHistory.canGoBack()),
     loading: Boolean(browserView?.webContents.isLoading()),
@@ -949,13 +1011,14 @@ function resizeBrowserView() {
   browserView.setBounds({ x: 0, y: toolbarHeight, width, height: Math.max(1, height - toolbarHeight - keyboardHeight) });
 }
 
-function ensureBrowserView() {
-  if (browserView) return browserView;
+function ensureBrowserView(selectedApp) {
+  const existing = browserSessions.get(selectedApp.id);
+  if (existing && !existing.view.webContents.isDestroyed()) return existing;
 
   const webSession = session.fromPartition(WEB_PARTITION);
   const userAgent = configureWebSession(webSession);
 
-  browserView = new WebContentsView({
+  const view = new WebContentsView({
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -968,34 +1031,41 @@ function ensureBrowserView() {
     }
   });
 
-  browserView.setBackgroundColor('#090d14');
-  browserView.webContents.setUserAgent(userAgent);
-  browserView.webContents.setWindowOpenHandler(({ url }) => {
-    if (isSecureWebUrl(url)) browserView.webContents.loadURL(url);
+  view.setBackgroundColor('#090d14');
+  view.webContents.setUserAgent(userAgent);
+  view.webContents.setWindowOpenHandler(({ url }) => {
+    if (isSecureWebUrl(url)) view.webContents.loadURL(url);
     return { action: 'deny' };
   });
 
   for (const eventName of ['did-stop-loading', 'did-navigate', 'did-navigate-in-page', 'page-title-updated']) {
-    browserView.webContents.on(eventName, () => sendBrowserState());
+    view.webContents.on(eventName, () => {
+      if (view === browserView) sendBrowserState();
+      sendActiveApps();
+    });
   }
-  browserView.webContents.on('did-start-loading', () => sendBrowserState({ error: '' }));
-  browserView.webContents.on('did-fail-load', (_event, errorCode, errorDescription, _url, isMainFrame) => {
-    if (isMainFrame && errorCode !== -3) sendBrowserState({ error: errorDescription || `Ошибка ${errorCode}` });
+  view.webContents.on('did-start-loading', () => {
+    if (view === browserView) sendBrowserState({ error: '' });
   });
-  browserView.webContents.on('enter-html-full-screen', () => {
+  view.webContents.on('did-fail-load', (_event, errorCode, errorDescription, _url, isMainFrame) => {
+    if (view === browserView && isMainFrame && errorCode !== -3) sendBrowserState({ error: errorDescription || `Ошибка ${errorCode}` });
+  });
+  view.webContents.on('enter-html-full-screen', () => {
+    if (view !== browserView) return;
     browserFullscreen = true;
     resizeBrowserView();
     sendBrowserState();
   });
-  browserView.webContents.on('leave-html-full-screen', () => {
+  view.webContents.on('leave-html-full-screen', () => {
+    if (view !== browserView) return;
     browserFullscreen = false;
     resizeBrowserView();
     sendBrowserState();
   });
-  browserView.webContents.on('media-started-playing', () => { browserMediaPlaying = true; });
-  browserView.webContents.on('media-paused', () => { browserMediaPlaying = false; });
+  view.webContents.on('media-started-playing', () => { if (view === browserView) browserMediaPlaying = true; });
+  view.webContents.on('media-paused', () => { if (view === browserView) browserMediaPlaying = false; });
 
-  browserView.webContents.on('before-input-event', (event, input) => {
+  view.webContents.on('before-input-event', (event, input) => {
     const key = input.key;
     if (input.type !== 'keyDown' || input.isAutoRepeat) return;
     if (key === 'Home' || key === 'BrowserHome' || (key === 'Escape' && input.alt)) {
@@ -1005,12 +1075,12 @@ function ensureBrowserView() {
     }
     if (key === 'Escape' && browserFullscreen) {
       event.preventDefault();
-      browserView.webContents.executeJavaScript('document.fullscreenElement ? document.exitFullscreen() : false', true).catch(() => {});
+      view.webContents.executeJavaScript('document.fullscreenElement ? document.exitFullscreen() : false', true).catch(() => {});
       return;
     }
     if (key === 'BrowserBack' || key === 'Escape') {
       event.preventDefault();
-      if (browserView.webContents.navigationHistory.canGoBack()) browserView.webContents.navigationHistory.goBack();
+      if (view.webContents.navigationHistory.canGoBack()) view.webContents.navigationHistory.goBack();
       else showLauncher();
       return;
     }
@@ -1026,7 +1096,24 @@ function ensureBrowserView() {
     }
   });
 
-  return browserView;
+  const entry = { app: { ...selectedApp }, view, lastActiveAt: Date.now(), loaded: false };
+  browserSessions.set(selectedApp.id, entry);
+  view.webContents.once('destroyed', () => {
+    browserSessions.delete(selectedApp.id);
+    if (browserView === view) {
+      const wasVisible = browserVisible;
+      browserView = null;
+      activeBrowserAppId = null;
+      browserVisible = false;
+      keyboardVisible = false;
+      browserFullscreen = false;
+      sendBrowserState({ visible: false });
+      if (wasVisible && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('launcher:home');
+    }
+    sendActiveApps();
+  });
+  sendActiveApps();
+  return entry;
 }
 
 function showLauncher() {
@@ -1049,6 +1136,7 @@ function showLauncher() {
   restoreKioskWindow();
   mainWindow?.webContents.focus();
   sendBrowserState({ visible: false });
+  sendActiveApps();
   mainWindow?.webContents.send('launcher:home');
 }
 
@@ -1083,15 +1171,94 @@ function requestLauncherAction(action) {
   setTimeout(() => mainWindow?.webContents.send('launcher:system-action', action), 50);
 }
 
-async function openWebsite(url) {
+async function openWebsite(selectedApp, targetUrl = null) {
   await mediaComponentsReady;
-  const view = ensureBrowserView();
+  const entry = ensureBrowserView(selectedApp);
+  const view = entry.view;
+  if (browserView && browserView !== view && mainWindow.contentView.children.includes(browserView)) {
+    browserView.webContents.executeJavaScript(`(() => {
+      for (const media of document.querySelectorAll('video, audio')) media.pause();
+    })()`).catch(() => {});
+    mainWindow.contentView.removeChildView(browserView);
+  }
+  browserView = view;
+  activeBrowserAppId = selectedApp.id;
+  entry.lastActiveAt = Date.now();
   if (!mainWindow.contentView.children.includes(view)) mainWindow.contentView.addChildView(view);
   browserVisible = true;
+  keyboardVisible = false;
+  browserFullscreen = false;
   resizeBrowserView();
   view.webContents.focus();
-  await view.webContents.loadURL(url);
+  const url = targetUrl || selectedApp.url;
+  if (targetUrl || !entry.loaded || !view.webContents.getURL()) {
+    await view.webContents.loadURL(url);
+    entry.loaded = true;
+  }
   sendBrowserState({ visible: true });
+  sendActiveApps();
+}
+
+function closeWebApp(appId) {
+  const entry = browserSessions.get(String(appId || ''));
+  if (!entry) return { ok: false, message: 'Приложение уже закрыто.' };
+  const wasActive = entry.view === browserView;
+  const wasVisible = wasActive && browserVisible;
+  if (mainWindow?.contentView.children.includes(entry.view)) mainWindow.contentView.removeChildView(entry.view);
+  browserSessions.delete(String(appId));
+  if (wasActive) {
+    browserView = null;
+    activeBrowserAppId = null;
+    browserVisible = false;
+    keyboardVisible = false;
+    browserFullscreen = false;
+    sendBrowserState({ visible: false });
+    if (wasVisible && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('launcher:home');
+  }
+  if (!entry.view.webContents.isDestroyed()) entry.view.webContents.close();
+  sendActiveApps();
+  return { ok: true, apps: activeWebApps() };
+}
+
+async function activateWebApp(appId) {
+  const entry = browserSessions.get(String(appId || ''));
+  if (!entry) return { ok: false, message: 'Приложение уже закрыто.' };
+  const storedApp = readApps().find((item) => item.id === appId);
+  if (!storedApp || !appAllowedForProfile(storedApp)) return { ok: false, message: 'Приложение недоступно.' };
+  await openWebsite(storedApp);
+  return { ok: true };
+}
+
+function contentSources() {
+  return appsForActiveProfile()
+    .filter((item) => item.type !== 'system' && item.url && contentProviderForUrl(item.url))
+    .map((item) => ({
+      id: item.id,
+      title: item.title,
+      titleEn: item.titleEn || '',
+      icon: item.icon || '',
+      iconPath: item.iconPath || '',
+      iconDataUrl: item.iconDataUrl || '',
+      accent: item.accent || '#334155',
+      provider: contentProviderForUrl(item.url),
+      supportsFilm: contentProviderForUrl(item.url) !== 'twitch'
+    }));
+}
+
+async function openContentSuggestion(sourceId, requestedType, language) {
+  const type = requestedType === 'video' ? 'video' : 'film';
+  const locale = language === 'en' ? 'en' : 'ru';
+  let candidates = contentSources().filter((item) => type === 'video' || item.supportsFilm);
+  if (sourceId && sourceId !== 'any') candidates = candidates.filter((item) => item.id === sourceId);
+  if (!candidates.length) return { ok: false, message: locale === 'en' ? 'No suitable web video app is available.' : 'Нет подходящего веб-приложения с видео.' };
+  const source = candidates[crypto.randomInt(candidates.length)];
+  const appItem = readApps().find((item) => item.id === source.id);
+  const ideas = CONTENT_IDEAS[type][locale];
+  const [title, query] = ideas[crypto.randomInt(ideas.length)];
+  const targetUrl = buildContentSearchUrl(appItem.url, query);
+  if (!targetUrl) return { ok: false, message: locale === 'en' ? 'This app does not support content discovery.' : 'Это приложение пока не поддерживает подбор контента.' };
+  await openWebsite(appItem, targetUrl);
+  return { ok: true, title, source: locale === 'en' ? (appItem.titleEn || appItem.title) : appItem.title, type };
 }
 
 async function controlWebMedia(action) {
@@ -1158,8 +1325,12 @@ function createWindow() {
   mainWindow.loadFile(rendererPath('index.html'));
   mainWindow.on('resize', resizeBrowserView);
   mainWindow.on('closed', () => {
-    browserView?.webContents.close();
+    for (const entry of browserSessions.values()) {
+      if (!entry.view.webContents.isDestroyed()) entry.view.webContents.close();
+    }
+    browserSessions.clear();
     browserView = null;
+    activeBrowserAppId = null;
     mainWindow = null;
   });
 
@@ -1591,6 +1762,7 @@ ipcMain.handle('apps:delete', (_event, id) => {
   const target = apps.find((item) => item.id === id);
   if (!target) return { ok: false, message: 'Приложение не найдено' };
   if (!target.custom) return { ok: false, message: 'Встроенное приложение удалить нельзя' };
+  if (browserSessions.has(id)) closeWebApp(id);
   const updated = apps.filter((item) => item.id !== id);
   writeApps(updated);
   return { ok: true, apps: updated };
@@ -1659,7 +1831,7 @@ ipcMain.handle('app:open', async (_event, selectedApp) => {
   }
   if (!/^https:\/\//i.test(storedApp.url || '')) return { ok: false, message: 'Разрешены только HTTPS-адреса' };
   try {
-    await openWebsite(storedApp.url);
+    await openWebsite(storedApp);
     return { ok: true };
   } catch (error) {
     showLauncher();
@@ -1689,6 +1861,11 @@ ipcMain.handle('browser:keyboard', (_event, visible) => {
   resizeBrowserView();
   return keyboardVisible;
 });
+ipcMain.handle('active-apps:get', () => activeWebApps());
+ipcMain.handle('active-apps:activate', (_event, appId) => activateWebApp(appId));
+ipcMain.handle('active-apps:close', (_event, appId) => closeWebApp(appId));
+ipcMain.handle('content:sources', () => contentSources());
+ipcMain.handle('content:open', (_event, sourceId, type, language) => openContentSuggestion(sourceId, type, language));
 ipcMain.handle('keyboard:input', (_event, input) => {
   if (!browserView || !browserVisible || browserView.webContents.isDestroyed()) return false;
   const value = String(input || '');

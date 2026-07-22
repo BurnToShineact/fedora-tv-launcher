@@ -2,12 +2,25 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  buildContentSearchUrl,
   cleanBrowserUserAgent,
+  contentProviderForUrl,
   fileKind,
   isInsideFileBrowserRoots,
   isSecureWebUrl,
   normalizeWeatherCity
 } = require('../src/lib/system-utils');
+
+test('content discovery recognizes supported web apps and builds safe search URLs', () => {
+  assert.equal(contentProviderForUrl('https://www.youtube.com/tv'), 'youtube');
+  assert.equal(contentProviderForUrl('https://rutube.ru'), 'rutube');
+  assert.equal(contentProviderForUrl('https://example.com'), null);
+  assert.equal(
+    buildContentSearchUrl('https://www.youtube.com/tv', 'фильм на вечер'),
+    'https://www.youtube.com/results?search_query=%D1%84%D0%B8%D0%BB%D1%8C%D0%BC%20%D0%BD%D0%B0%20%D0%B2%D0%B5%D1%87%D0%B5%D1%80'
+  );
+  assert.equal(buildContentSearchUrl('https://example.com', 'video'), '');
+});
 
 test('cleanBrowserUserAgent hides Electron product tokens', () => {
   assert.equal(

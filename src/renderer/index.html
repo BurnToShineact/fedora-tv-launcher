@@ -11,7 +11,7 @@
   <header class="browser-toolbar" id="browser-toolbar" data-nav-zone="browser" data-nav-order="0" hidden>
     <div class="browser-actions" role="toolbar" aria-label="Управление браузером">
       <button class="browser-button focusable" id="browser-back" aria-label="Назад">←</button>
-      <button class="browser-button focusable" id="browser-home" aria-label="На главный экран">⌂</button>
+      <button class="browser-button focusable" id="browser-home" aria-label="Свернуть на главный экран">⌂</button>
       <button class="browser-button focusable" id="browser-refresh" aria-label="Обновить страницу">↻</button>
       <button class="browser-button focusable" id="browser-play" aria-label="Воспроизведение или пауза">▶</button>
       <button class="browser-button focusable" id="browser-fullscreen" aria-label="Полноэкранный режим">⛶</button>
@@ -63,6 +63,10 @@
           <button class="status-pill focusable" id="topbar-bluetooth" type="button" aria-label="Устройства Bluetooth" aria-expanded="false"><i class="bluetooth-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M7 7l10 10-5 4V3l5 4L7 17"/></svg></i><b>Bluetooth</b></button>
           <button class="status-pill focusable" id="topbar-volume" type="button" aria-label="Настроить громкость" aria-expanded="false"><i class="volume-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 10v4h4l5 4V6l-5 4H4Z"/><path d="M16 9.5a4 4 0 0 1 0 5"/><path d="M19 7a7 7 0 0 1 0 10"/></svg></i><b>—</b></button>
         </div>
+        <button class="topbar-button active-apps-button focusable" id="active-apps-button" aria-label="Активные приложения" aria-expanded="false" title="Активные приложения">
+          <svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="7" width="13" height="11" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-1"/></svg>
+          <span class="active-apps-count" id="active-apps-count" hidden>0</span>
+        </button>
         <button class="topbar-button focusable" id="keyboard-toggle" aria-label="Экранная клавиатура" title="Экранная клавиатура">
           <svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 9h.01M11 9h.01M15 9h.01M18 9h.01M7 13h.01M11 13h.01M15 13h.01M18 13h.01M8 16h8"/></svg>
         </button>
@@ -131,14 +135,14 @@
             <span id="weather-daylight">—</span>
           </span>
           <span class="daylight-track" aria-hidden="true"><i id="weather-daylight-progress"></i></span>
-          <span class="weather-source">Open‑Meteo</span>
+          <span class="weather-source">Open‑Meteo · выбрать город</span>
         </button>
-        <button class="dashboard-card shuffle-card focusable" id="shuffle-card" type="button" aria-label="Выбрать случайное приложение">
-          <span class="shuffle-icon" id="shuffle-icon" aria-hidden="true">↝</span>
+        <button class="dashboard-card shuffle-card focusable" id="shuffle-card" type="button" aria-label="Выбрать фильм или ролик">
+          <span class="shuffle-icon" id="shuffle-icon" aria-hidden="true">▶</span>
           <span class="shuffle-copy">
-            <span class="dashboard-eyebrow" id="shuffle-eyebrow">Вечерний выбор</span>
+            <span class="dashboard-eyebrow" id="shuffle-eyebrow">Веб‑приложения</span>
             <strong id="shuffle-title">Что включить?</strong>
-            <span id="shuffle-description">Нажмите — подберём приложение</span>
+            <span id="shuffle-description">Фильм или короткий ролик</span>
           </span>
         </button>
       </div>
@@ -156,6 +160,57 @@
       <button class="footer-button focusable danger" data-action="poweroff"><span>⏻</span><b data-i18n="poweroff">Выключение</b></button>
     </footer>
   </main>
+
+  <div class="panel-backdrop" id="weather-backdrop" hidden>
+    <section class="panel compact-panel" role="dialog" aria-modal="true" aria-labelledby="weather-picker-title">
+      <div class="panel-header">
+        <div><p class="eyebrow" data-i18n="weatherGroup">Главный экран</p><h2 id="weather-picker-title" data-i18n="chooseWeatherCity">Выберите город</h2></div>
+        <button class="icon-button focusable" id="weather-picker-close" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <p class="panel-description" data-i18n="chooseWeatherCityHint">Введите любой город вручную или выберите быстрый вариант.</p>
+      <form class="weather-picker-form" id="weather-picker-form">
+        <label class="system-field"><span data-i18n="weatherCity">Город</span><input class="focusable" id="weather-picker-input" type="text" minlength="2" maxlength="64" autocomplete="off" placeholder="Москва"></label>
+        <button class="dialog-button focusable" id="weather-picker-save" type="submit" data-i18n="weatherSave">Сохранить и проверить</button>
+      </form>
+      <div class="city-presets" data-nav-zone="weather-cities" data-nav-order="1">
+        <button class="choice-chip focusable" type="button" data-weather-city="Москва">Москва</button>
+        <button class="choice-chip focusable" type="button" data-weather-city="Санкт-Петербург">Санкт-Петербург</button>
+        <button class="choice-chip focusable" type="button" data-weather-city="Казань">Казань</button>
+        <button class="choice-chip focusable" type="button" data-weather-city="Екатеринбург">Екатеринбург</button>
+      </div>
+      <p class="weather-settings-status" id="weather-picker-status" role="status"></p>
+    </section>
+  </div>
+
+  <div class="panel-backdrop" id="content-backdrop" hidden>
+    <section class="panel compact-panel" role="dialog" aria-modal="true" aria-labelledby="content-picker-title">
+      <div class="panel-header">
+        <div><p class="eyebrow" data-i18n="contentFromWeb">Из веб‑приложений</p><h2 id="content-picker-title" data-i18n="whatToWatch">Что посмотреть?</h2></div>
+        <button class="icon-button focusable" id="content-picker-close" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <p class="panel-description" data-i18n="contentPickerHint">Выберите формат и приложение — откроется готовая тематическая подборка.</p>
+      <div class="content-type-grid" data-nav-zone="content-types" data-nav-order="1">
+        <button class="content-type-card focusable selected" type="button" data-content-type="film"><span>▰</span><strong data-i18n="movieOption">Фильм</strong><small data-i18n="movieOptionHint">Полнометражное кино или документалка</small></button>
+        <button class="content-type-card focusable" type="button" data-content-type="video"><span>▶</span><strong data-i18n="videoOption">Ролик</strong><small data-i18n="videoOptionHint">Короткое видео по интересной теме</small></button>
+      </div>
+      <div class="content-source-heading"><strong data-i18n="openIn">Открыть в приложении</strong></div>
+      <div class="content-source-list" id="content-source-list" data-nav-zone="content-sources" data-nav-order="2" aria-live="polite"></div>
+      <div class="panel-actions" data-nav-zone="content-action" data-nav-order="3">
+        <button class="dialog-button focusable" id="content-open" type="button" data-i18n="pickContent">Подобрать и открыть</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="panel-backdrop" id="active-apps-backdrop" hidden>
+    <section class="panel active-apps-panel" role="dialog" aria-modal="true" aria-labelledby="active-apps-title">
+      <div class="panel-header">
+        <div><p class="eyebrow" data-i18n="appMemory">Память приложений</p><h2 id="active-apps-title" data-i18n="activeApps">Активные приложения</h2></div>
+        <button class="icon-button focusable" id="active-apps-close" type="button" aria-label="Закрыть">×</button>
+      </div>
+      <p class="panel-description" data-i18n="activeAppsHint">Свернутые веб‑приложения сохраняют страницу и позицию просмотра, пока вы их не закроете.</p>
+      <div class="active-apps-list" id="active-apps-list" data-nav-zone="active-apps" data-nav-order="1" aria-live="polite"></div>
+    </section>
+  </div>
 
   <div class="dialog-backdrop" id="dialog-backdrop" hidden>
     <section class="dialog" id="confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="dialog-title" aria-describedby="dialog-text">
