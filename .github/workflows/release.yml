@@ -23,13 +23,16 @@ jobs:
           cache: npm
 
       - name: Install RPM tools
-        run: sudo apt-get update && sudo apt-get install -y rpm
+        run: sudo apt-get update && sudo apt-get install -y rpm shellcheck
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Check JavaScript
-        run: npm run check
+      - name: Run stability checks
+        run: |
+          npm run verify
+          npm run audit:prod
+          shellcheck --severity=error packaging/*.sh scripts/*.sh session/fedora-tv-os-home session/fedora-tv-os-logout session/fedora-tv-os-session session/fedora-tv-os-startup session/fedora-tv-os-system-settings
 
       - name: Verify package version matches tag
         if: startsWith(github.ref, 'refs/tags/')
@@ -41,6 +44,10 @@ jobs:
       - name: Build RPM
         if: startsWith(github.ref, 'refs/tags/')
         run: npm run release:github
+
+      - name: Verify RPM identity and payload
+        if: startsWith(github.ref, 'refs/tags/')
+        run: bash scripts/verify-rpm.sh
 
       - name: Sign RPM and refresh update metadata
         if: startsWith(github.ref, 'refs/tags/')

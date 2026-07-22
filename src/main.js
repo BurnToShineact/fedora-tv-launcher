@@ -5,6 +5,21 @@ const os = require('os');
 const crypto = require('crypto');
 const { execFile, spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
+const {
+  POWER_DEFAULTS,
+  cleanBrowserUserAgent,
+  fileKind,
+  isInsideFileBrowserRoots,
+  isSecureWebUrl,
+  normalizeBluetoothError,
+  normalizeDisplayOutput,
+  parseBluetoothDeviceLines,
+  parseVolume,
+  parseWpctlSinks,
+  splitNmcliLine,
+  validateDisplayCandidate,
+  validatePowerSettings
+} = require('./lib/system-utils');
 
 let mainWindow;
 let browserView;
@@ -35,13 +50,6 @@ const BROWSER_TOOLBAR_HEIGHT = 70;
 const KEYBOARD_HEIGHT = 292;
 const KEYBOARD_VIEWPORT_RATIO = 0.48;
 const WEB_PARTITION = 'persist:fedora-tv';
-const POWER_DEFAULTS = {
-  idleTimeout: 0,
-  powerButtonAction: 'ask',
-  lidAction: 'suspend',
-  lidExternalAction: 'suspend',
-  lidDockedAction: 'ignore'
-};
 const SYSTEM_COMMAND_ENV = { ...process.env, LC_ALL: 'C', LANG: 'C' };
 
 if (safeMode) app.disableHardwareAcceleration();
@@ -757,21 +765,6 @@ async function exportDiagnostics() {
   }
 }
 
-function cleanBrowserUserAgent(userAgent) {
-  return String(userAgent || '')
-    .replace(/\s+(?:Electron|fedora-tv-os)\/[^\s]+/gi, '')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
-}
-
-function isSecureWebUrl(value) {
-  try {
-    return new URL(value).protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
-
 function configureWebSession(webSession) {
   const userAgent = cleanBrowserUserAgent(webSession.getUserAgent());
   webSession.setUserAgent(userAgent, 'ru-RU,ru,en-US,en');
@@ -1072,10 +1065,6 @@ function fileBrowserRoots() {
   return [...unique.values()];
 }
 
-function isInsideFileBrowserRoots(candidatePath, roots = fileBrowserRoots()) {
-  return roots.some((root) => candidatePath === root.path || candidatePath.startsWith(`${root.path}${path.sep}`));
-}
-
 function resolveBrowsablePath(candidate, roots = fileBrowserRoots()) {
   if (typeof candidate !== 'string' || !path.isAbsolute(candidate)) return null;
   try {
@@ -1084,17 +1073,6 @@ function resolveBrowsablePath(candidate, roots = fileBrowserRoots()) {
   } catch {
     return null;
   }
-}
-
-function fileKind(filePath, directory) {
-  if (directory) return 'folder';
-  const extension = path.extname(filePath).toLowerCase();
-  if (['.mp4', '.mkv', '.webm', '.avi', '.mov', '.m4v'].includes(extension)) return 'video';
-  if (['.mp3', '.ogg', '.flac', '.wav', '.m4a', '.aac'].includes(extension)) return 'audio';
-  if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp'].includes(extension)) return 'image';
-  if (['.pdf', '.txt', '.md', '.doc', '.docx', '.odt', '.rtf'].includes(extension)) return 'document';
-  if (['.zip', '.tar', '.gz', '.bz2', '.xz', '.7z', '.rar'].includes(extension)) return 'archive';
-  return 'file';
 }
 
 async function listFiles(candidatePath) {
@@ -1582,27 +1560,6 @@ ipcMain.handle('system:action', async (_event, action) => {
   return { ok: false, message: 'Неизвестное действие' };
 });
 
-function parseVolume(output) {
-  const match = String(output).match(/Volume:\s+([0-9.]+)/i);
-  return { volume: match ? Math.round(Number(match[1]) * 100) : 0, muted: /\[MUTED\]/i.test(output) };
-}
-
-function parseWpctlSinks(output) {
-  const sinks = [];
-  let inSinks = false;
-  for (const originalLine of String(output).replace(/\x1b\[[0-9;]*m/g, '').split(/\r?\n/)) {
-    if (/\bSinks:\s*$/.test(originalLine)) { inSinks = true; continue; }
-    if (inSinks && /\b(?:Sources|Filters|Streams):\s*$/.test(originalLine)) break;
-    if (!inSinks) continue;
-    const line = originalLine.replace(/^[\s│├└─]+/, '');
-    const match = line.match(/^(\*)?\s*(\d+)\.\s+(.+?)\s*$/);
-    if (!match) continue;
-    const name = match[3].replace(/\s+\[vol:.*$/i, '').trim();
-    if (name) sinks.push({ id: Number(match[2]), name, default: Boolean(match[1]) });
-  }
-  return sinks;
-}
-
 async function getAudioState() {
   const [volumeResult, statusResult] = await Promise.all([
     runSystemCommand('wpctl', ['get-volume', '@DEFAULT_AUDIO_SINK@'], { env: SYSTEM_COMMAND_ENV }),
@@ -1621,15 +1578,6 @@ async function selectAudioOutput(id) {
   }
   const result = await runSystemCommand('wpctl', ['set-default', String(safeId)], { env: SYSTEM_COMMAND_ENV });
   return result.ok ? getAudioState() : result;
-}
-
-function parseBluetoothDeviceLines(output) {
-  const devices = new Map();
-  for (const line of String(output || '').split(/\r?\n/)) {
-    const match = line.trim().match(/^Device\s+([0-9A-F]{2}(?::[0-9A-F]{2}){5})\s+(.+)$/i);
-    if (match) devices.set(match[1].toUpperCase(), match[2].trim());
-  }
-  return devices;
 }
 
 async function bluetoothDevicesByFilter(filter) {
@@ -1702,18 +1650,6 @@ function runBluetoothPairing(address) {
   });
 }
 
-function normalizeBluetoothError(message) {
-  const detail = String(message || '');
-  if (/AuthenticationFailed|AuthenticationCanceled|AuthenticationRejected/i.test(detail)) {
-    return 'Сопряжение не удалось. Переведите устройство в режим подключения и попробуйте снова.';
-  }
-  if (/not available|not connected|le-connection-abort-by-local|page-timeout/i.test(detail)) {
-    return 'Устройство не отвечает. Убедитесь, что оно рядом и находится в режиме подключения.';
-  }
-  if (/InProgress|Operation already in progress/i.test(detail)) return 'Подключение уже выполняется.';
-  return detail.trim() || 'Не удалось подключить устройство Bluetooth.';
-}
-
 async function toggleBluetooth(enabled) {
   const result = await runSystemCommand('bluetoothctl', ['power', enabled ? 'on' : 'off'], { timeout: 15000, env: SYSTEM_COMMAND_ENV });
   return result.ok ? getBluetoothState(Boolean(enabled)) : result;
@@ -1736,38 +1672,6 @@ async function toggleBluetoothDevice(address) {
   return getBluetoothState(false);
 }
 
-function normalizeDisplayMode(mode = {}) {
-  const width = Math.round(Number(mode.width) || 0);
-  const height = Math.round(Number(mode.height) || 0);
-  const refresh = Number(mode.refresh) || 0;
-  return {
-    width,
-    height,
-    refresh,
-    preferred: Boolean(mode.preferred),
-    current: Boolean(mode.current),
-    id: `${width}x${height}@${refresh.toFixed(3)}`
-  };
-}
-
-function normalizeDisplayOutput(output = {}) {
-  const position = output.position || {};
-  const adaptiveValue = output.adaptive_sync ?? output.adaptiveSync;
-  return {
-    name: String(output.name || '').slice(0, 128),
-    description: String(output.description || [output.make, output.model].filter(Boolean).join(' ') || output.name || '').slice(0, 240),
-    make: String(output.make || '').slice(0, 120),
-    model: String(output.model || '').slice(0, 120),
-    enabled: output.enabled !== false,
-    x: Math.round(Number(position.x ?? output.x) || 0),
-    y: Math.round(Number(position.y ?? output.y) || 0),
-    scale: Math.max(0.5, Math.min(3, Number(output.scale) || 1)),
-    transform: String(output.transform || 'normal'),
-    adaptiveSync: adaptiveValue == null ? null : adaptiveValue === true || adaptiveValue === 'enabled',
-    modes: Array.isArray(output.modes) ? output.modes.map(normalizeDisplayMode).filter((mode) => mode.width && mode.height) : []
-  };
-}
-
 async function getDisplayState() {
   const result = await runSystemCommand('wlr-randr', ['--json'], { env: SYSTEM_COMMAND_ENV });
   if (!result.ok) {
@@ -1787,27 +1691,6 @@ async function getDisplayState() {
   } catch {
     return { ok: false, available: false, message: 'wlr-randr вернул неизвестный формат данных.' };
   }
-}
-
-function validateDisplayCandidate(candidate, displayState) {
-  const output = displayState.outputs.find((item) => item.name === String(candidate?.output || ''));
-  if (!output) return { error: 'Выбранный дисплей больше недоступен.' };
-  const enabled = candidate?.enabled !== false;
-  if (!enabled && output.enabled && displayState.outputs.filter((item) => item.enabled).length <= 1) {
-    return { error: 'Нельзя отключить единственный активный дисплей.' };
-  }
-  const modeId = String(candidate?.mode || '');
-  const mode = output.modes.find((item) => item.id === modeId)
-    || output.modes.find((item) => item.current)
-    || output.modes.find((item) => item.preferred);
-  if (enabled && !mode) return { error: 'Для дисплея не найден поддерживаемый видеорежим.' };
-  const scale = Math.max(0.5, Math.min(3, Number(candidate?.scale) || output.scale || 1));
-  const transforms = ['normal', '90', '180', '270', 'flipped', 'flipped-90', 'flipped-180', 'flipped-270'];
-  const transform = transforms.includes(candidate?.transform) ? candidate.transform : output.transform;
-  const x = Math.max(-32768, Math.min(32768, Math.round(Number(candidate?.x) || 0)));
-  const y = Math.max(-32768, Math.min(32768, Math.round(Number(candidate?.y) || 0)));
-  const adaptiveSync = output.adaptiveSync == null ? null : Boolean(candidate?.adaptiveSync);
-  return { output, enabled, mode, scale, transform, x, y, adaptiveSync };
 }
 
 async function applyDisplaySettings(candidate, persist = true) {
@@ -1850,20 +1733,6 @@ async function applySavedDisplayConfiguration() {
   for (const configuration of configurations) {
     await applyDisplaySettings(configuration, false);
   }
-}
-
-function splitNmcliLine(line) {
-  const values = [];
-  let value = '';
-  let escaped = false;
-  for (const character of line) {
-    if (escaped) { value += character; escaped = false; }
-    else if (character === '\\') escaped = true;
-    else if (character === ':') { values.push(value); value = ''; }
-    else value += character;
-  }
-  values.push(value);
-  return values;
 }
 
 async function getSavedWifiConnections() {
@@ -1986,19 +1855,6 @@ async function setAutologin(enabled) {
     return { ok: false, message: canceled ? 'Изменение автозапуска отменено.' : `Не удалось изменить автозапуск: ${result.message}` };
   }
   return getAutologinState();
-}
-
-function validatePowerSettings(candidate = {}) {
-  const idleTimeout = [0, 5, 10, 20, 30, 60, 120].includes(Number(candidate.idleTimeout)) ? Number(candidate.idleTimeout) : 0;
-  const powerActions = ['ask', 'poweroff', 'suspend', 'ignore'];
-  const lidActions = ['suspend', 'poweroff', 'ignore'];
-  return {
-    idleTimeout,
-    powerButtonAction: powerActions.includes(candidate.powerButtonAction) ? candidate.powerButtonAction : POWER_DEFAULTS.powerButtonAction,
-    lidAction: lidActions.includes(candidate.lidAction) ? candidate.lidAction : POWER_DEFAULTS.lidAction,
-    lidExternalAction: lidActions.includes(candidate.lidExternalAction) ? candidate.lidExternalAction : POWER_DEFAULTS.lidExternalAction,
-    lidDockedAction: lidActions.includes(candidate.lidDockedAction) ? candidate.lidDockedAction : POWER_DEFAULTS.lidDockedAction
-  };
 }
 
 async function setPowerSettings(candidate) {

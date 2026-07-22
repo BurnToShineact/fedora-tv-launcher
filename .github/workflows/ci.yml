@@ -1,0 +1,78 @@
+name: Stability checks
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stability-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: JavaScript, tests and shell
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run project verification
+        run: npm run verify
+
+      - name: Audit production dependencies
+        run: npm run audit:prod
+
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Analyze shell scripts
+        run: shellcheck --severity=error packaging/*.sh scripts/*.sh session/fedora-tv-os-home session/fedora-tv-os-logout session/fedora-tv-os-session session/fedora-tv-os-startup session/fedora-tv-os-system-settings
+
+  fedora-rpm:
+    name: Build RPM on Fedora 44
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:44
+    steps:
+      - name: Install Fedora build tools
+        run: dnf install -y git nodejs npm rpm-build libxcrypt-compat
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run project verification
+        run: npm run verify
+
+      - name: Build unsigned RPM
+        run: npm run build:rpm -- --publish never
+
+      - name: Verify RPM identity and payload
+        run: bash scripts/verify-rpm.sh
+
+      - name: Upload RPM smoke-test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fedora-tv-os-rpm-${{ github.sha }}
+          path: |
+            dist/*.rpm
+            dist/latest-linux.yml
+          if-no-files-found: error
+          retention-days: 7

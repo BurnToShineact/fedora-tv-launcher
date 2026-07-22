@@ -1,6 +1,6 @@
 {
   "name": "fedora-tv-os",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Отдельная телевизионная Wayland-сессия для Fedora",
   "homepage": "https://github.com/BurnToShineact/fedora-tv-launcher",
   "repository": {
@@ -24,7 +24,12 @@
     "release:github": "electron-builder --linux rpm --publish never",
     "release:metadata": "node scripts/update-release-metadata.js",
     "build:linux": "electron-builder --linux rpm",
-    "check": "node --check src/main.js && node --check src/preload.js && node --check src/renderer/launcher.js"
+    "check:js": "node --check src/main.js && node --check src/preload.js && node --check src/renderer/launcher.js && node --check src/lib/system-utils.js && node --check scripts/update-release-metadata.js",
+    "check:shell": "bash -n packaging/*.sh scripts/*.sh session/fedora-tv-os-home session/fedora-tv-os-logout session/fedora-tv-os-session session/fedora-tv-os-startup session/fedora-tv-os-system-settings",
+    "check": "npm run check:js && npm run check:shell",
+    "test": "node --test tests/*.test.js",
+    "audit:prod": "npm audit --omit=dev --audit-level=high",
+    "verify": "npm run check && npm test"
   },
   "dependencies": {
     "electron-updater": "^6.8.4"

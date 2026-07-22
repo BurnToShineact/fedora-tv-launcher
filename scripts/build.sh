@@ -9,9 +9,8 @@ if ! command -v rpmbuild >/dev/null 2>&1 || ! ldconfig -p 2>/dev/null | grep -q 
   exit 1
 fi
 
-npm install
-npm run check
-bash -n packaging/*.sh scripts/*.sh session/fedora-tv-os-*
+npm ci
+npm run verify
 npm run build:rpm
 
 if [[ -n ${FEDORA_TV_SIGNING_HOME:-} ]]; then
