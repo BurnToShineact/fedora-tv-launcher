@@ -8,6 +8,23 @@ const POWER_DEFAULTS = Object.freeze({
   lidDockedAction: 'ignore'
 });
 
+function commandResult(error, stdout, stderr) {
+  const cleanStdout = String(stdout || '').trim();
+  const cleanStderr = String(stderr || '').trim();
+  const diagnostic = [cleanStdout, cleanStderr].filter(Boolean).join('\n');
+  return {
+    ok: !error,
+    message: error ? diagnostic || String(error?.message || error).trim() : cleanStdout || cleanStderr,
+    stdout: cleanStdout,
+    stderr: cleanStderr,
+    code: error?.code ?? 0
+  };
+}
+
+function rpmSignatureIsValid(result) {
+  return Boolean(result?.ok && /Signature[^\n]*:\s*OK\s*$/im.test(String(result.message || '')));
+}
+
 function cleanBrowserUserAgent(userAgent) {
   return String(userAgent || '')
     .replace(/\s+(?:Electron|fedora-tv-os)\/[^\s]+/gi, '')
@@ -21,6 +38,12 @@ function isSecureWebUrl(value) {
   } catch {
     return false;
   }
+}
+
+function normalizeWeatherCity(value) {
+  const city = String(value || '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim();
+  if (city.length < 2 || city.length > 64) return '';
+  return city;
 }
 
 function isInsideFileBrowserRoots(candidatePath, roots) {
@@ -170,15 +193,18 @@ function validatePowerSettings(candidate = {}, defaults = POWER_DEFAULTS) {
 module.exports = {
   POWER_DEFAULTS,
   cleanBrowserUserAgent,
+  commandResult,
   fileKind,
   isInsideFileBrowserRoots,
   isSecureWebUrl,
+  normalizeWeatherCity,
   normalizeBluetoothError,
   normalizeDisplayMode,
   normalizeDisplayOutput,
   parseBluetoothDeviceLines,
   parseVolume,
   parseWpctlSinks,
+  rpmSignatureIsValid,
   splitNmcliLine,
   validateDisplayCandidate,
   validatePowerSettings

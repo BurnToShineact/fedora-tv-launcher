@@ -27,6 +27,19 @@ const updateVisualPercent = document.getElementById('update-visual-percent');
 const updateOrbit = document.getElementById('update-orbit');
 const clock = document.getElementById('clock');
 const dateLabel = document.getElementById('date');
+const weatherCard = document.getElementById('weather-card');
+const weatherIcon = document.getElementById('weather-icon');
+const weatherLocation = document.getElementById('weather-location');
+const weatherTemperature = document.getElementById('weather-temperature');
+const weatherCondition = document.getElementById('weather-condition');
+const weatherRange = document.getElementById('weather-range');
+const weatherDaylight = document.getElementById('weather-daylight');
+const weatherDaylightProgress = document.getElementById('weather-daylight-progress');
+const shuffleCard = document.getElementById('shuffle-card');
+const shuffleIcon = document.getElementById('shuffle-icon');
+const shuffleEyebrow = document.getElementById('shuffle-eyebrow');
+const shuffleTitle = document.getElementById('shuffle-title');
+const shuffleDescription = document.getElementById('shuffle-description');
 const backdrop = document.getElementById('dialog-backdrop');
 const dialogTitle = document.getElementById('dialog-title');
 const dialogText = document.getElementById('dialog-text');
@@ -67,6 +80,10 @@ const updateInstallButton = document.getElementById('update-install');
 const backgroundPreview = document.getElementById('background-preview');
 const backgroundChooseButton = document.getElementById('background-choose');
 const backgroundClearButton = document.getElementById('background-clear');
+const weatherCityForm = document.getElementById('weather-city-form');
+const weatherCityInput = document.getElementById('weather-city');
+const weatherCitySave = document.getElementById('weather-city-save');
+const weatherSettingsStatus = document.getElementById('weather-settings-status');
 const keyboardToggle = document.getElementById('keyboard-toggle');
 const settingsShortcut = document.getElementById('settings-shortcut');
 const topbarNetwork = document.getElementById('topbar-network');
@@ -187,6 +204,10 @@ let flatpakLoading = false;
 let currentProfile = 'main';
 let ambientTimeoutMinutes = 10;
 let ambientTimer = null;
+let latestWeatherState = null;
+let weatherLoading = false;
+let selectedShuffleApp = null;
+let shuffleOpening = false;
 const rememberedFocus = new WeakMap();
 const overlayReturnFocus = new WeakMap();
 
@@ -197,7 +218,7 @@ const translations = {
     diagnosticsGroup: 'Поддержка', diagnosticsTitle: 'Диагностика', diagnosticsDescription: 'Проверка видео, звука, сети, Bluetooth, Flatpak и журналов оболочки.', runDiagnostics: 'Проверить', exportDiagnostics: 'Сохранить отчёт', welcomeTitle: 'Добро пожаловать', welcomeDescription: 'Настроим сеть, звук и телевизор. После этого всё управление будет доступно с пульта.', welcomeNetwork: 'Подключение к Wi‑Fi', welcomeSound: 'Проверка звука и экрана', welcomeApps: 'Установка приложений', skipSetup: 'Пропустить', startSetup: 'Начать настройку',
     cecTitle: 'Пульт телевизора и звук', cecEnabled: 'Управление через HDMI-CEC', cecDescription: 'Кнопки пульта телевизора управляют оболочкой при наличии CEC-адаптера.', autoHdmiAudio: 'Автоматически выбирать звук HDMI', autoHdmiAudioDescription: 'При подключении телевизора переключать звук на HDMI или DisplayPort.',
     profilesGroup: 'Доступ', profilesTitle: 'Профили и родительский PIN', profilesDescription: 'В детском профиле скрыты настройки, файлы и отмеченные вами приложения.', activeProfile: 'Активный профиль', mainProfile: 'Основной', kidsProfile: 'Детский', parentalPin: 'Текущий PIN', switchProfile: 'Переключить профиль', savePin: 'Сохранить PIN',
-    screensaverGroup: 'Экран', screensaverTitle: 'Заставка с часами', screensaverDescription: 'Показывается только на домашнем экране; видео и открытые приложения не прерываются.', screensaverAfter: 'Включать после',
+    screensaverGroup: 'Экран', screensaverTitle: 'Заставка с часами', screensaverDescription: 'Показывается только на домашнем экране; видео и открытые приложения не прерываются.', screensaverAfter: 'Включать после', weatherGroup: 'Главный экран', weatherTitle: 'Погода', weatherDescription: 'Укажите город для прогноза на домашнем экране. Данные обновляются примерно раз в 15 минут.', weatherCity: 'Город', weatherSave: 'Сохранить и проверить',
     soundGroup: 'Звук', soundTitle: 'Громкость', mute: 'Выключить звук', unmute: 'Включить звук', networkTitle: 'Беспроводная сеть', scan: 'Обновить список', connect: 'Подключиться', cancel: 'Отмена', languageGroup: 'Язык', languageTitle: 'Язык интерфейса', inputGroup: 'Ввод', keyboardTitle: 'Экранная клавиатура', keyboardDescription: 'Открывается автоматически в полях ввода. Её также можно включить кнопкой ⌨ в верхней панели.', openKeyboard: 'Открыть клавиатуру', noNetworks: 'Сети Wi‑Fi не найдены.', wifiOff: 'Wi‑Fi выключен', connected: 'Подключено', secured: 'Защищённая сеть', savedNetwork: 'Сохранённая сеть', open: 'Открытая сеть', signal: 'Сигнал', password: 'Пароль для', apps: 'Приложения', settings: 'Настройки', webApp: 'Веб-приложение', systemApp: 'Системное · Home для возврата', settingsKind: 'Настройки оболочки', addApp: 'Добавить приложение', addKind: 'Сайт или приложение из системы', brandSubtitle: 'Отдельная TV-сессия', logout: 'Сменить пользователя', reboot: 'Перезагрузка', poweroff: 'Выключение', newTile: 'Новая плитка', website: 'Веб-сайт', fromSystem: 'Из системы', systemGroup: 'Система', updateTitle: 'Обновление Fedora TV OS', checkUpdates: 'Проверить обновления', appearanceGroup: 'Оформление', backgroundTitle: 'Фоновое изображение', chooseImage: 'Выбрать изображение', resetBackground: 'Сбросить фон', myApps: 'Мои приложения', done: 'Готово', displayGroup: 'Изображение', displayTitle: 'Дисплеи', displayDescription: 'Выберите экран и настройте его видеорежим. Изменения сохраняются для следующих запусков TV-сессии.', displayOutput: 'Дисплей', displayMode: 'Разрешение и частота', displayScale: 'Масштаб', displayRotation: 'Поворот', displayPositionX: 'Позиция X', displayPositionY: 'Позиция Y', displayEnabled: 'Использовать дисплей', displayEnabledHint: 'Единственный активный экран отключить нельзя.', adaptiveSync: 'Адаптивная частота', adaptiveSyncHint: 'Использовать VRR, если дисплей и видеодрайвер поддерживают его.', rotationNormal: 'Обычный', apply: 'Применить', refreshDevices: 'Обновить устройства', audioOutput: 'Устройство вывода', powerGroup: 'Питание', powerTitle: 'Сон, крышка и кнопки', powerDescription: 'Таймер сна действует в TV-сессии. Крышка и физическая кнопка питания настраиваются для всего устройства после системного подтверждения.', sleepAfter: 'Переходить в сон', never: 'Никогда', powerButton: 'Кнопка питания', askBeforePoweroff: 'Показать подтверждение', poweroffNow: 'Выключить', sleep: 'Сон', doNothing: 'Ничего не делать', lidBattery: 'Закрытие крышки', lidExternalPower: 'Крышка при питании от сети', lidDocked: 'Крышка с внешним дисплеем', applyPower: 'Сохранить настройки питания', bluetoothTitle: 'Bluetooth', bluetoothDescription: 'Подключайте наушники, колонки, пульты и другие устройства.', findDevices: 'Найти устройства', bluetoothOff: 'Bluetooth выключен', noBluetoothDevices: 'Устройства Bluetooth не найдены.', paired: 'Сопряжено', connecting: 'Подключаем…', disconnect: 'Отключить', categorySystem: 'Система', categorySystemHint: 'Обновления и питание', categoryPicture: 'Изображение и звук', categoryPictureHint: 'Экран, масштаб и громкость', categoryConnections: 'Подключения', categoryConnectionsHint: 'Wi‑Fi и Bluetooth', categoryAppearance: 'Оформление', categoryAppearanceHint: 'Фоновое изображение', categoryInput: 'Язык и ввод', categoryInputHint: 'Язык и экранная клавиатура', categoryApps: 'Приложения', categoryAppsHint: 'Добавленные плитки', allSettings: 'Все настройки', filesEyebrow: 'Проводник', filesTitle: 'Файлы', location: 'Расположение', filesHint: 'Выберите папку для перехода или файл, чтобы открыть его в подходящем приложении.'
   },
   en: {
@@ -206,7 +227,7 @@ const translations = {
     diagnosticsGroup: 'Support', diagnosticsTitle: 'Diagnostics', diagnosticsDescription: 'Checks video, audio, network, Bluetooth, Flatpak, and shell logs.', runDiagnostics: 'Run checks', exportDiagnostics: 'Save report', welcomeTitle: 'Welcome', welcomeDescription: 'Let’s set up the network, sound, and TV. Everything will then work from your remote.', welcomeNetwork: 'Connect to Wi-Fi', welcomeSound: 'Check sound and display', welcomeApps: 'Install apps', skipSetup: 'Skip', startSetup: 'Start setup',
     cecTitle: 'TV remote and audio', cecEnabled: 'Control through HDMI-CEC', cecDescription: 'TV remote buttons control the shell when a CEC adapter is available.', autoHdmiAudio: 'Select HDMI audio automatically', autoHdmiAudioDescription: 'Switch sound to HDMI or DisplayPort when a TV is connected.',
     profilesGroup: 'Access', profilesTitle: 'Profiles and parental PIN', profilesDescription: 'The kids profile hides settings, files, and apps you mark as restricted.', activeProfile: 'Active profile', mainProfile: 'Main', kidsProfile: 'Kids', parentalPin: 'Current PIN', switchProfile: 'Switch profile', savePin: 'Save PIN',
-    screensaverGroup: 'Screen', screensaverTitle: 'Clock screensaver', screensaverDescription: 'Shown only on Home; videos and open apps are not interrupted.', screensaverAfter: 'Start after',
+    screensaverGroup: 'Screen', screensaverTitle: 'Clock screensaver', screensaverDescription: 'Shown only on Home; videos and open apps are not interrupted.', screensaverAfter: 'Start after', weatherGroup: 'Home screen', weatherTitle: 'Weather', weatherDescription: 'Choose a city for the Home forecast. Data refreshes about every 15 minutes.', weatherCity: 'City', weatherSave: 'Save and check',
     soundGroup: 'Sound', soundTitle: 'Volume', mute: 'Mute', unmute: 'Unmute', networkTitle: 'Wireless network', scan: 'Refresh list', connect: 'Connect', cancel: 'Cancel', languageGroup: 'Language', languageTitle: 'Interface language', inputGroup: 'Input', keyboardTitle: 'On-screen keyboard', keyboardDescription: 'Opens automatically for text fields. You can also use the ⌨ button in the top bar.', openKeyboard: 'Open keyboard', noNetworks: 'No Wi-Fi networks found.', wifiOff: 'Wi-Fi is off', connected: 'Connected', secured: 'Secured network', savedNetwork: 'Saved network', open: 'Open network', signal: 'Signal', password: 'Password for', apps: 'Apps', settings: 'Settings', webApp: 'Web app', systemApp: 'System app · Home to return', settingsKind: 'Shell settings', addApp: 'Add app', addKind: 'Website or system app', brandSubtitle: 'Dedicated TV session', logout: 'Switch user', reboot: 'Restart', poweroff: 'Power off', newTile: 'New tile', website: 'Website', fromSystem: 'From system', systemGroup: 'System', updateTitle: 'Fedora TV OS update', checkUpdates: 'Check for updates', appearanceGroup: 'Appearance', backgroundTitle: 'Background image', chooseImage: 'Choose image', resetBackground: 'Reset background', myApps: 'My apps', done: 'Done', displayGroup: 'Picture', displayTitle: 'Displays', displayDescription: 'Choose a screen and configure its video mode. Changes are saved for future TV sessions.', displayOutput: 'Display', displayMode: 'Resolution and refresh rate', displayScale: 'Scale', displayRotation: 'Rotation', displayPositionX: 'Position X', displayPositionY: 'Position Y', displayEnabled: 'Use this display', displayEnabledHint: 'The only active display cannot be disabled.', adaptiveSync: 'Adaptive refresh rate', adaptiveSyncHint: 'Use VRR when supported by the display and video driver.', rotationNormal: 'Normal', apply: 'Apply', refreshDevices: 'Refresh devices', audioOutput: 'Output device', powerGroup: 'Power', powerTitle: 'Sleep, lid and buttons', powerDescription: 'The sleep timer applies to the TV session. Lid and physical power button settings apply to the whole device after system confirmation.', sleepAfter: 'Go to sleep after', never: 'Never', powerButton: 'Power button', askBeforePoweroff: 'Ask before powering off', poweroffNow: 'Power off', sleep: 'Sleep', doNothing: 'Do nothing', lidBattery: 'Close lid', lidExternalPower: 'Close lid on AC power', lidDocked: 'Close lid with external display', applyPower: 'Save power settings', bluetoothTitle: 'Bluetooth', bluetoothDescription: 'Connect headphones, speakers, remotes, and other devices.', findDevices: 'Find devices', bluetoothOff: 'Bluetooth is off', noBluetoothDevices: 'No Bluetooth devices found.', paired: 'Paired', connecting: 'Connecting…', disconnect: 'Disconnect', categorySystem: 'System', categorySystemHint: 'Updates and power', categoryPicture: 'Picture and sound', categoryPictureHint: 'Display, scale, and volume', categoryConnections: 'Connections', categoryConnectionsHint: 'Wi‑Fi and Bluetooth', categoryAppearance: 'Appearance', categoryAppearanceHint: 'Background image', categoryInput: 'Language and input', categoryInputHint: 'Language and on-screen keyboard', categoryApps: 'Apps', categoryAppsHint: 'Added tiles', allSettings: 'All settings', filesEyebrow: 'File browser', filesTitle: 'Files', location: 'Location', filesHint: 'Choose a folder to browse it or a file to open it in the appropriate app.'
   }
 };
@@ -223,9 +244,8 @@ function applyLanguage(language) {
   document.getElementById('hero-eyebrow').textContent = english ? 'Home screen' : 'Домашний экран';
   updateGreeting();
   document.getElementById('hero-description').textContent = english ? 'Web services and Fedora apps — together in one place.' : 'Веб-сервисы и приложения Fedora — в одном месте.';
-  document.getElementById('hero-hints').innerHTML = english
-    ? '<span><kbd>← ↑ ↓ →</kbd><b>Navigate</b></span><span><kbd>OK</kbd><b>Open</b></span><span><kbd>Home</kbd><b>Home</b></span>'
-    : '<span><kbd>← ↑ ↓ →</kbd><b>Выбор</b></span><span><kbd>OK</kbd><b>Открыть</b></span><span><kbd>Home</kbd><b>Домой</b></span>';
+  renderShuffleCard();
+  if (latestWeatherState) renderWeather(latestWeatherState);
   document.querySelector('.section-title h2').textContent = t('apps');
   document.getElementById('manage-title').textContent = t('settings');
   const idleLabels = english
@@ -369,6 +389,170 @@ function updateClock() {
   screensaverClock.textContent = new Intl.DateTimeFormat(locale, { hour:'2-digit', minute:'2-digit' }).format(now);
   screensaverDate.textContent = new Intl.DateTimeFormat(locale, { weekday:'long', day:'numeric', month:'long' }).format(now);
   updateGreeting(now);
+}
+
+function weatherPresentation(code, isDay) {
+  if (code === 0) return { icon: isDay ? '☀' : '☾', ru: isDay ? 'Ясно' : 'Ясная ночь', en: isDay ? 'Clear' : 'Clear night' };
+  if ([1, 2].includes(code)) return { icon: isDay ? '⛅' : '☁', ru: 'Переменная облачность', en: 'Partly cloudy' };
+  if (code === 3) return { icon: '☁', ru: 'Пасмурно', en: 'Overcast' };
+  if ([45, 48].includes(code)) return { icon: '≋', ru: 'Туман', en: 'Fog' };
+  if (code >= 51 && code <= 57) return { icon: '☂', ru: 'Морось', en: 'Drizzle' };
+  if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) return { icon: '☂', ru: code >= 80 ? 'Ливень' : 'Дождь', en: code >= 80 ? 'Rain showers' : 'Rain' };
+  if ((code >= 71 && code <= 77) || [85, 86].includes(code)) return { icon: '❄', ru: 'Снег', en: 'Snow' };
+  if (code >= 95) return { icon: 'ϟ', ru: 'Гроза', en: 'Thunderstorm' };
+  return { icon: '◌', ru: 'Погода меняется', en: 'Changing weather' };
+}
+
+function formatTemperature(value) {
+  if (!Number.isFinite(Number(value))) return '—°';
+  const rounded = Math.round(Number(value));
+  return `${rounded > 0 ? '+' : ''}${rounded}°`;
+}
+
+function parseLocalWeatherTime(value) {
+  if (!value) return null;
+  const parsed = new Date(/[zZ]|[+-]\d\d:\d\d$/.test(String(value)) ? value : `${value}Z`);
+  return Number.isFinite(parsed.getTime()) ? parsed : null;
+}
+
+function formatWeatherTime(value) {
+  const date = parseLocalWeatherTime(value);
+  if (!date) return '—';
+  return new Intl.DateTimeFormat(currentLanguage === 'en' ? 'en-US' : 'ru-RU', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' }).format(date);
+}
+
+function formatWeatherDuration(milliseconds) {
+  const totalMinutes = Math.max(1, Math.round(milliseconds / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (currentLanguage === 'en') return hours ? `${hours}h ${minutes ? `${minutes}m` : ''}`.trim() : `${minutes}m`;
+  return hours ? `${hours} ч ${minutes ? `${minutes} мин` : ''}`.trim() : `${minutes} мин`;
+}
+
+function daylightState(days = [], utcOffsetSeconds = 0) {
+  const today = days[0] || {};
+  const sunrise = parseLocalWeatherTime(today.sunrise);
+  const sunset = parseLocalWeatherTime(today.sunset);
+  const now = new Date(Date.now() + (Number(utcOffsetSeconds) || 0) * 1000);
+  if (!sunrise || !sunset) return { label: '—', progress: 0 };
+  if (now < sunrise) return {
+    label: `${currentLanguage === 'en' ? 'Sunrise' : 'Рассвет'} ${formatWeatherTime(today.sunrise)}`,
+    progress: 0
+  };
+  if (now <= sunset) return {
+    label: `${currentLanguage === 'en' ? 'Sunset in' : 'До заката'} ${formatWeatherDuration(sunset - now)}`,
+    progress: Math.max(0, Math.min(100, ((now - sunrise) / (sunset - sunrise)) * 100))
+  };
+  const tomorrowSunrise = days[1]?.sunrise;
+  return {
+    label: `${currentLanguage === 'en' ? 'Sunrise' : 'Рассвет'} ${formatWeatherTime(tomorrowSunrise || today.sunrise)}`,
+    progress: 0
+  };
+}
+
+function renderWeather(state = {}) {
+  latestWeatherState = state;
+  const english = currentLanguage === 'en';
+  weatherCard.classList.toggle('is-error', !state.ok);
+  weatherCard.classList.toggle('is-night', state.ok && !state.current?.isDay);
+  if (!state.ok) {
+    weatherIcon.textContent = '!';
+    weatherLocation.textContent = state.city || (english ? 'Weather' : 'Погода');
+    weatherTemperature.textContent = '—°';
+    weatherCondition.textContent = state.message || (english ? 'Forecast unavailable' : 'Прогноз недоступен');
+    weatherRange.textContent = english ? 'Press to retry' : 'Нажмите, чтобы повторить';
+    weatherDaylight.textContent = '—';
+    weatherDaylightProgress.style.width = '0%';
+    weatherCard.setAttribute('aria-label', state.message || (english ? 'Retry weather update' : 'Повторить обновление погоды'));
+    return;
+  }
+
+  const presentation = weatherPresentation(state.current?.weatherCode, state.current?.isDay);
+  const today = state.days?.[0] || {};
+  const daylight = daylightState(state.days, state.utcOffsetSeconds);
+  weatherIcon.textContent = presentation.icon;
+  const region = String(state.region || '');
+  weatherLocation.textContent = [state.city, region && region.toLocaleLowerCase() !== String(state.city || '').toLocaleLowerCase() ? region : ''].filter(Boolean).join(' · ');
+  weatherTemperature.textContent = formatTemperature(state.current?.temperature);
+  weatherCondition.textContent = `${presentation[english ? 'en' : 'ru']} · ${english ? 'feels like' : 'ощущается как'} ${formatTemperature(state.current?.apparentTemperature)}`;
+  weatherRange.textContent = `${english ? 'Low' : 'Мин'} ${formatTemperature(today.min)} · ${english ? 'High' : 'Макс'} ${formatTemperature(today.max)}`;
+  weatherDaylight.textContent = daylight.label;
+  weatherDaylightProgress.style.width = `${daylight.progress}%`;
+  weatherCard.setAttribute('aria-label', `${state.city}: ${weatherTemperature.textContent}, ${presentation[english ? 'en' : 'ru']}. ${english ? 'Press to refresh.' : 'Нажмите, чтобы обновить.'}`);
+  weatherSettingsStatus.textContent = state.stale
+    ? (state.message || (english ? 'Showing the last saved forecast.' : 'Показан последний сохранённый прогноз.'))
+    : `${english ? 'Forecast ready for' : 'Прогноз настроен для'} ${state.city}.`;
+}
+
+async function refreshWeather(force = false) {
+  if (weatherLoading) return;
+  weatherLoading = true;
+  weatherCard.classList.add('refreshing');
+  weatherCard.setAttribute('aria-busy', 'true');
+  try {
+    const result = await window.tv.getWeather(currentLanguage, force);
+    renderWeather(result || { ok: false });
+    if (force && result?.ok && !result.stale) showToast(currentLanguage === 'en' ? 'Weather updated' : 'Погода обновлена');
+  } catch (error) {
+    renderWeather({ ok: false, city: weatherCityInput.value, message: error?.message });
+  } finally {
+    weatherLoading = false;
+    weatherCard.classList.remove('refreshing');
+    weatherCard.removeAttribute('aria-busy');
+  }
+}
+
+function localizedAppTitle(app) {
+  const builtInEnglishTitles = { vkvideo: 'VK Video', browser: 'Browser', files: 'Files', settings: 'Settings' };
+  return currentLanguage === 'en' ? (app?.titleEn || builtInEnglishTitles[app?.id] || app?.title) : app?.title;
+}
+
+function renderShuffleCard() {
+  const english = currentLanguage === 'en';
+  shuffleEyebrow.textContent = english ? 'Tonight’s pick' : 'Вечерний выбор';
+  shuffleCard.classList.toggle('picked', Boolean(selectedShuffleApp));
+  if (!selectedShuffleApp) {
+    shuffleIcon.classList.remove('has-image');
+    shuffleIcon.replaceChildren('↝');
+    shuffleTitle.textContent = english ? 'What should I play?' : 'Что включить?';
+    shuffleDescription.textContent = english ? 'Press and we’ll pick an app' : 'Нажмите — подберём приложение';
+    shuffleCard.setAttribute('aria-label', english ? 'Pick a random app' : 'Выбрать случайное приложение');
+    return;
+  }
+  const title = localizedAppTitle(selectedShuffleApp);
+  renderAppIcon(shuffleIcon, selectedShuffleApp);
+  shuffleTitle.textContent = title;
+  shuffleDescription.textContent = english ? 'Press again to open' : 'Нажмите ещё раз — откроем';
+  shuffleCard.setAttribute('aria-label', `${title}. ${english ? 'Press again to open.' : 'Нажмите ещё раз, чтобы открыть.'}`);
+}
+
+function shuffleCandidates() {
+  return appsCache.filter((item) => !['settings', 'files'].includes(item.action) && (item.url || item.type === 'system'));
+}
+
+async function handleShuffleCard() {
+  if (shuffleOpening) return;
+  if (!selectedShuffleApp) {
+    const candidates = shuffleCandidates();
+    if (!candidates.length) return showToast(currentLanguage === 'en' ? 'Add an app first' : 'Сначала добавьте приложение');
+    const random = new Uint32Array(1);
+    crypto.getRandomValues(random);
+    selectedShuffleApp = candidates[random[0] % candidates.length];
+    renderShuffleCard();
+    return;
+  }
+
+  shuffleOpening = true;
+  const appToOpen = selectedShuffleApp;
+  if (appToOpen.type === 'system') showToast(currentLanguage === 'en' ? 'Opening app · Home to return' : 'Открываем приложение · Home — вернуться');
+  try {
+    const result = await window.tv.openApp(appToOpen);
+    if (!result?.ok) return showToast(result?.message || (currentLanguage === 'en' ? 'Could not open app' : 'Не удалось открыть приложение'));
+    selectedShuffleApp = null;
+    renderShuffleCard();
+  } finally {
+    shuffleOpening = false;
+  }
 }
 
 function hideScreensaver() {
@@ -1525,8 +1709,7 @@ async function renderApps() {
     button.dataset.app = JSON.stringify(app);
     button.innerHTML = `<span class="icon"></span><span class="title"></span>${app.favorite ? '<span class="favorite-mark" aria-label="Избранное">★</span>' : ''}`;
     renderAppIcon(button.querySelector('.icon'), app);
-    const builtInEnglishTitles = { vkvideo: 'VK Video', browser: 'Browser', files: 'Files', settings: 'Settings' };
-    button.querySelector('.title').textContent = currentLanguage === 'en' ? (app.titleEn || builtInEnglishTitles[app.id] || app.title) : app.title;
+    button.querySelector('.title').textContent = localizedAppTitle(app);
     button.addEventListener('click', () => activate(button));
     makeCardInteractive(button);
     grid.appendChild(button);
@@ -1540,6 +1723,10 @@ async function renderApps() {
     addButton.addEventListener('click', () => activate(addButton));
     makeCardInteractive(addButton);
     grid.appendChild(addButton);
+  }
+  if (selectedShuffleApp) {
+    selectedShuffleApp = appsCache.find((app) => app.id === selectedShuffleApp.id) || null;
+    renderShuffleCard();
   }
 }
 
@@ -1563,8 +1750,10 @@ async function loadApps() {
   applyLanguage(preferences?.language);
   renderProfile(preferences || {});
   applyAmbientPreference(preferences || {});
+  weatherCityInput.value = preferences?.weatherCity || 'Москва';
   onboarding.hidden = preferences?.onboardingComplete !== false;
   await renderApps();
+  refreshWeather(false);
   document.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', () => activate(button)));
   document.querySelectorAll('[data-add-close]').forEach((button) => button.addEventListener('click', closeAddPanel));
   document.querySelectorAll('[data-add-mode]').forEach((button) => button.addEventListener('click', () => setAddMode(button.dataset.addMode)));
@@ -1623,6 +1812,30 @@ async function loadApps() {
     applyAmbientPreference(result.preferences);
     showToast(currentLanguage === 'en' ? 'Screensaver setting saved' : 'Настройка заставки сохранена');
     refreshFocusables(screensaverTimeout);
+  });
+  weatherCard.addEventListener('click', () => refreshWeather(true));
+  shuffleCard.addEventListener('click', handleShuffleCard);
+  weatherCityForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const candidate = weatherCityInput.value.trim();
+    weatherCitySave.disabled = true;
+    weatherSettingsStatus.textContent = currentLanguage === 'en' ? 'Checking the city and forecast…' : 'Проверяем город и прогноз…';
+    try {
+      const result = await window.tv.setWeatherCity(candidate, currentLanguage);
+      if (!result?.ok) {
+        weatherSettingsStatus.textContent = result?.message || (currentLanguage === 'en' ? 'Could not save the city.' : 'Не удалось сохранить город.');
+        return;
+      }
+      weatherCityInput.value = candidate;
+      renderWeather(result);
+      setKeyboardVisible(false);
+      showToast(currentLanguage === 'en' ? `Weather city: ${result.city}` : `Город погоды: ${result.city}`);
+    } catch (error) {
+      weatherSettingsStatus.textContent = error?.message || (currentLanguage === 'en' ? 'Weather service unavailable.' : 'Сервис погоды недоступен.');
+    } finally {
+      weatherCitySave.disabled = false;
+      refreshFocusables(weatherCitySave);
+    }
   });
   document.querySelectorAll('[data-manage-close]').forEach((button) => button.addEventListener('click', closeManagePanel));
   document.querySelectorAll('[data-settings-open]').forEach((button) => button.addEventListener('click', () => showSettingsCategory(button.dataset.settingsOpen)));
@@ -1916,6 +2129,7 @@ async function loadApps() {
     keyboardShifted = false;
     applyLanguage(button.dataset.language);
     await renderApps();
+    refreshWeather(false);
     refreshFocusables(button);
   }));
   refreshFocusables(onboarding.hidden ? grid.querySelector('.app-card') : onboardingStart);
@@ -2123,7 +2337,10 @@ window.tv.onHardwareChanged(async () => {
 window.tv.onSystemActionRequested((action) => requestSystemAction(action));
 window.tv.onBrowserState(renderBrowserState);
 window.tv.onUpdateState(renderUpdateState);
-window.addEventListener('online', () => window.tv.checkForUpdates());
+window.addEventListener('online', () => {
+  window.tv.checkForUpdates();
+  refreshWeather(true);
+});
 updateClock();
 setInterval(updateClock, 1000);
 loadApps().catch((error) => showToast(error.message));

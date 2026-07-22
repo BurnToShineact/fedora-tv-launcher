@@ -2,12 +2,28 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  commandResult,
   normalizeBluetoothError,
   parseBluetoothDeviceLines,
   parseVolume,
   parseWpctlSinks,
+  rpmSignatureIsValid,
   splitNmcliLine
 } = require('../src/lib/system-utils');
+
+test('commandResult keeps rpmkeys diagnostics written to stdout on failure', () => {
+  const error = Object.assign(new Error('Command failed'), { code: 1 });
+  const result = commandResult(error, 'Header OpenPGP signature, key ID c317c64f: NOKEY\n', '');
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 1);
+  assert.match(result.message, /NOKEY/);
+});
+
+test('rpmSignatureIsValid requires a successful OpenPGP signature check', () => {
+  assert.equal(rpmSignatureIsValid({ ok: true, message: 'Header OpenPGP V4 RSA/SHA512 signature, key fingerprint: 95ea: OK\nHeader SHA256 digest: OK' }), true);
+  assert.equal(rpmSignatureIsValid({ ok: false, message: 'Header OpenPGP signature, key ID c317c64f: NOKEY' }), false);
+  assert.equal(rpmSignatureIsValid({ ok: true, message: 'Header SHA256 digest: OK\nPayload SHA256 digest: OK' }), false);
+});
 
 test('parseVolume reads percentage and mute state from wpctl', () => {
   assert.deepEqual(parseVolume('Volume: 0.73'), { volume: 73, muted: false });

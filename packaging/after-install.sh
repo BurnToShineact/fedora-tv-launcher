@@ -37,7 +37,6 @@ install -Dm644 "$SESSION_SOURCE/labwc/menu.xml" /etc/fedora-tv-os/labwc/menu.xml
 install -Dm644 "$SESSION_SOURCE/labwc/themerc-override" /etc/fedora-tv-os/labwc/themerc-override
 if [ -f "$RELEASE_KEY_SOURCE" ]; then
   install -Dm644 "$RELEASE_KEY_SOURCE" /etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-tv-os
-  rpmkeys --import /etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-tv-os
 fi
 
 if command -v restorecon >/dev/null 2>&1; then

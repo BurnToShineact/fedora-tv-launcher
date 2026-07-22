@@ -1,6 +1,6 @@
 {
   "name": "fedora-tv-os",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "description": "Отдельная телевизионная Wayland-сессия для Fedora",
   "homepage": "https://github.com/BurnToShineact/fedora-tv-launcher",
   "repository": {
@@ -79,6 +79,7 @@
       "afterRemove": "packaging/after-remove.sh",
       "depends": [
         "gtk3",
+        "glib2",
         "libnotify",
         "nss",
         "libXScrnSaver",

@@ -9,6 +9,30 @@ if command -v dbus-update-activation-environment >/dev/null 2>&1; then
   dbus-update-activation-environment --systemd WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE FEDORA_TV_SESSION >/dev/null 2>&1 || true
 fi
 
+# GDM обычно регистрирует стороннюю Wayland-сессию сам, но только через
+# 10 секунд. На части систем за это время успевает запуститься greeter GNOME,
+# переключить VT и отобрать DRM-master у labwc. Объявляем регистрацию в
+# desktop-файле и подтверждаем готовность сразу после создания Wayland-сокета.
+register_gdm_session() {
+  command -v gdbus >/dev/null 2>&1 || return 1
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    if gdbus call --system \
+      --dest org.gnome.DisplayManager \
+      --object-path /org/gnome/DisplayManager/Manager \
+      --method org.gnome.DisplayManager.Manager.RegisterSession \
+      '{}' >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  return 1
+}
+
+if ! register_gdm_session; then
+  printf 'Fedora TV OS: не удалось немедленно зарегистрировать сессию в GDM.\n' >&2
+fi
+
 if [ -x /usr/libexec/lxqt-policykit-agent ]; then
   /usr/libexec/lxqt-policykit-agent >/dev/null 2>&1 &
 fi
@@ -38,18 +62,25 @@ while :; do
 
   if [ -n "$SAFE_ARGUMENT" ]; then
     if /usr/bin/fedora-tv-os --tv-session "$SAFE_ARGUMENT"; then
-      exit 0
+      STATUS=0
     else
       STATUS=$?
     fi
   else
     if /usr/bin/fedora-tv-os --tv-session; then
-      exit 0
+      STATUS=0
     else
       STATUS=$?
     fi
   fi
   if [ "$STATUS" -eq 42 ]; then
+    continue
+  fi
+  if [ "$STATUS" -eq 0 ]; then
+    rm -f "$CRASH_STATE"
+    printf '%s exit=0 restart=clean\n' "$(date --iso-8601=seconds)" >> "$CRASH_LOG"
+    tail -n 40 "$CRASH_LOG" > "$CRASH_LOG.tmp" && mv "$CRASH_LOG.tmp" "$CRASH_LOG"
+    sleep 1
     continue
   fi
   NOW=$(date +%s)

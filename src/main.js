@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, globalShortcut, session, dialog, nativeImage, components, powerMonitor, screen, shell } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, globalShortcut, session, dialog, nativeImage, components, powerMonitor, screen, shell, net } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -8,14 +8,17 @@ const { autoUpdater } = require('electron-updater');
 const {
   POWER_DEFAULTS,
   cleanBrowserUserAgent,
+  commandResult,
   fileKind,
   isInsideFileBrowserRoots,
   isSecureWebUrl,
   normalizeBluetoothError,
   normalizeDisplayOutput,
+  normalizeWeatherCity,
   parseBluetoothDeviceLines,
   parseVolume,
   parseWpctlSinks,
+  rpmSignatureIsValid,
   splitNmcliLine,
   validateDisplayCandidate,
   validatePowerSettings
@@ -42,6 +45,7 @@ let cecChild = null;
 let cecRestartTimer = null;
 let cecState = { enabled: true, available: false, connected: false, message: 'HDMI-CEC ещё не запущен.' };
 let applicationQuitting = false;
+let weatherCache = null;
 const isDev = process.argv.includes('--dev');
 const isTvSession = process.argv.includes('--tv-session') || process.env.FEDORA_TV_SESSION === '1';
 const safeMode = process.argv.includes('--safe-mode');
@@ -51,6 +55,8 @@ const KEYBOARD_HEIGHT = 292;
 const KEYBOARD_VIEWPORT_RATIO = 0.48;
 const WEB_PARTITION = 'persist:fedora-tv';
 const SYSTEM_COMMAND_ENV = { ...process.env, LC_ALL: 'C', LANG: 'C' };
+const DEFAULT_WEATHER_CITY = 'Москва';
+const WEATHER_CACHE_MAX_AGE = 15 * 60 * 1000;
 
 if (safeMode) app.disableHardwareAcceleration();
 
@@ -200,16 +206,33 @@ async function installDownloadedRpm() {
     return { ok: false, message: `Файл обновления недоступен: ${error.message}` };
   }
 
-  const [signature, identity] = await Promise.all([
-    runSystemCommand('rpmkeys', ['--checksig', '--verbose', rpmPath], { timeout: 30000, env: SYSTEM_COMMAND_ENV }),
-    runSystemCommand('rpm', ['-qp', '--queryformat', '%{NAME}\n%{VERSION}\n%{ARCH}\n', rpmPath], { timeout: 30000, env: SYSTEM_COMMAND_ENV })
-  ]);
-  const signatureValid = signature.ok && /Signature[^\n]*:\s*OK/i.test(signature.message);
+  const releaseKey = releaseKeyPath();
+  if (!releaseKey) {
+    const message = 'В установленной Fedora TV OS отсутствует доверенный ключ обновлений. Переустановите систему из официального RPM.';
+    writeUpdateLog('error', message);
+    return { ok: false, message };
+  }
+
+  const signatureDb = fs.mkdtempSync(path.join(os.tmpdir(), 'fedora-tv-os-rpmdb-'));
+  let signature;
+  let keyPreparation;
+  try {
+    fs.chmodSync(signatureDb, 0o700);
+    keyPreparation = await runSystemCommand(systemExecutable('rpmkeys'), ['--dbpath', signatureDb, '--import', releaseKey], { timeout: 30000, env: SYSTEM_COMMAND_ENV });
+    signature = keyPreparation.ok
+      ? await runSystemCommand(systemExecutable('rpmkeys'), ['--dbpath', signatureDb, '--checksig', '--verbose', rpmPath], { timeout: 30000, env: SYSTEM_COMMAND_ENV })
+      : keyPreparation;
+  } finally {
+    fs.rmSync(signatureDb, { recursive: true, force: true });
+  }
+
+  const identity = await runSystemCommand(systemExecutable('rpm'), ['-qp', '--queryformat', '%{NAME}\n%{VERSION}\n%{ARCH}\n', rpmPath], { timeout: 30000, env: SYSTEM_COMMAND_ENV });
+  const signatureValid = keyPreparation.ok && rpmSignatureIsValid(signature);
   const [packageName, packageVersion, packageArch] = String(identity.message || '').trim().split(/\r?\n/);
   if (!signatureValid) {
-    const message = /NOKEY/i.test(signature.message)
-      ? 'Ключ подписи обновлений не установлен. Переустановите Fedora TV OS из доверенного RPM.'
-      : 'RPM обновления не имеет корректной подписи Fedora TV OS. Установка остановлена.';
+    const message = keyPreparation.ok
+      ? 'RPM обновления не имеет корректной подписи Fedora TV OS. Установка остановлена.'
+      : 'Не удалось подготовить доверенный ключ Fedora TV OS для проверки обновления.';
     writeUpdateLog('error', `${message} ${signature.message}`);
     return { ok: false, message };
   }
@@ -238,9 +261,22 @@ async function installDownloadedRpm() {
 
   sendUpdateState({ status: 'installing', stage: 'authorization', progress: 15, message: 'Подтвердите обновление в системном окне Fedora.' });
 
+  const rpmkeysPath = systemExecutable('rpmkeys');
+  const keyImport = await runPrivilegedCommand(rpmkeysPath, ['--import', releaseKey], 2 * 60 * 1000);
+  if (!keyImport.ok) {
+    updateInstallInProgress = false;
+    restoreKioskWindow();
+    writeUpdateLog('error', `Unable to import release key: ${keyImport.message}`);
+    const message = /dismissed|cancel|not authorized|authentication.*failed/i.test(keyImport.message)
+      ? 'Установка отменена. Её можно запустить позже из настроек.'
+      : `Не удалось зарегистрировать ключ обновлений Fedora TV OS: ${keyImport.message}`;
+    sendUpdateState({ status: 'downloaded', stage: 'error', progress: 0, message });
+    return { ok: false, message };
+  }
+
   const result = await new Promise((resolve) => {
     const pkexecPath = fs.existsSync('/usr/bin/pkexec') ? '/usr/bin/pkexec' : 'pkexec';
-    const dnfPath = fs.existsSync('/usr/bin/dnf') ? '/usr/bin/dnf' : 'dnf';
+    const dnfPath = systemExecutable('dnf');
     const child = spawn(pkexecPath, [dnfPath, 'install', '--setopt=localpkg_gpgcheck=True', '-y', rpmPath], { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
@@ -347,9 +383,9 @@ function readSettings() {
     const onboardingComplete = Object.prototype.hasOwnProperty.call(saved, 'onboardingComplete')
       ? Boolean(saved.onboardingComplete)
       : true;
-    return { language: 'ru', cecEnabled: true, autoHdmiAudio: true, activeProfile: 'main', ambientTimeout: 10, ...saved, onboardingComplete, power: { ...POWER_DEFAULTS, ...(saved.power || {}) } };
+    return { language: 'ru', cecEnabled: true, autoHdmiAudio: true, activeProfile: 'main', ambientTimeout: 10, weatherCity: DEFAULT_WEATHER_CITY, ...saved, onboardingComplete, power: { ...POWER_DEFAULTS, ...(saved.power || {}) } };
   } catch {
-    return { language: 'ru', onboardingComplete: false, cecEnabled: true, autoHdmiAudio: true, activeProfile: 'main', ambientTimeout: 10, power: { ...POWER_DEFAULTS } };
+    return { language: 'ru', onboardingComplete: false, cecEnabled: true, autoHdmiAudio: true, activeProfile: 'main', ambientTimeout: 10, weatherCity: DEFAULT_WEATHER_CITY, power: { ...POWER_DEFAULTS } };
   }
 }
 
@@ -363,6 +399,108 @@ function writeSettings(patch) {
 function publicPreferences() {
   const { parentalPinHash: _hash, parentalPinSalt: _salt, ...preferences } = readSettings();
   return { ...preferences, parentalPinSet: Boolean(_hash && _salt) };
+}
+
+async function fetchJson(url, timeout = 9000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await net.fetch(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function weatherFailureMessage(error, language) {
+  const english = language === 'en';
+  if (error?.name === 'AbortError') return english ? 'Weather service timed out.' : 'Сервис погоды не ответил вовремя.';
+  if (/HTTP 429/.test(String(error?.message))) return english ? 'Weather is updating too often. Try again later.' : 'Слишком много запросов к погоде. Попробуйте позже.';
+  return english ? 'Weather is temporarily unavailable.' : 'Погода временно недоступна.';
+}
+
+async function getWeather(language = 'ru', force = false) {
+  const locale = language === 'en' ? 'en' : 'ru';
+  const city = normalizeWeatherCity(readSettings().weatherCity) || DEFAULT_WEATHER_CITY;
+  const cacheKey = `${locale}:${city.toLocaleLowerCase(locale)}`;
+  const now = Date.now();
+  if (!force && weatherCache?.key === cacheKey && now - weatherCache.savedAt < WEATHER_CACHE_MAX_AGE) {
+    return weatherCache.value;
+  }
+
+  try {
+    const geocodingUrl = new URL('https://geocoding-api.open-meteo.com/v1/search');
+    geocodingUrl.searchParams.set('name', city);
+    geocodingUrl.searchParams.set('count', '1');
+    geocodingUrl.searchParams.set('language', locale);
+    geocodingUrl.searchParams.set('format', 'json');
+    const geocoding = await fetchJson(geocodingUrl.toString());
+    const place = geocoding?.results?.[0];
+    if (!Number.isFinite(place?.latitude) || !Number.isFinite(place?.longitude)) {
+      return { ok: false, city, message: locale === 'en' ? 'City not found.' : 'Город не найден.' };
+    }
+
+    const forecastUrl = new URL('https://api.open-meteo.com/v1/forecast');
+    forecastUrl.searchParams.set('latitude', String(place.latitude));
+    forecastUrl.searchParams.set('longitude', String(place.longitude));
+    forecastUrl.searchParams.set('current', 'temperature_2m,apparent_temperature,is_day,precipitation,weather_code,cloud_cover,wind_speed_10m');
+    forecastUrl.searchParams.set('daily', 'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset');
+    forecastUrl.searchParams.set('timezone', 'auto');
+    forecastUrl.searchParams.set('forecast_days', '3');
+    const forecast = await fetchJson(forecastUrl.toString());
+    if (!forecast?.current || !forecast?.daily) throw new Error('Incomplete forecast response');
+
+    const days = Array.isArray(forecast.daily.time) ? forecast.daily.time.map((date, index) => ({
+      date,
+      weatherCode: Number(forecast.daily.weather_code?.[index]),
+      min: Number(forecast.daily.temperature_2m_min?.[index]),
+      max: Number(forecast.daily.temperature_2m_max?.[index]),
+      sunrise: forecast.daily.sunrise?.[index] || null,
+      sunset: forecast.daily.sunset?.[index] || null
+    })).filter((day) => day.date && Number.isFinite(day.min) && Number.isFinite(day.max)) : [];
+
+    const value = {
+      ok: true,
+      city: String(place.name || city).slice(0, 80),
+      region: String(place.admin1 || place.country || '').slice(0, 100),
+      timezone: String(forecast.timezone || '').slice(0, 80),
+      utcOffsetSeconds: Number(forecast.utc_offset_seconds) || 0,
+      updatedAt: now,
+      current: {
+        temperature: Number(forecast.current.temperature_2m),
+        apparentTemperature: Number(forecast.current.apparent_temperature),
+        isDay: Boolean(forecast.current.is_day),
+        precipitation: Number(forecast.current.precipitation),
+        weatherCode: Number(forecast.current.weather_code),
+        cloudCover: Number(forecast.current.cloud_cover),
+        windSpeed: Number(forecast.current.wind_speed_10m)
+      },
+      days
+    };
+    weatherCache = { key: cacheKey, savedAt: now, value };
+    return value;
+  } catch (error) {
+    if (weatherCache?.key === cacheKey) return { ...weatherCache.value, stale: true, message: weatherFailureMessage(error, locale) };
+    return { ok: false, city, message: weatherFailureMessage(error, locale) };
+  }
+}
+
+async function setWeatherCity(candidate, language) {
+  const city = normalizeWeatherCity(candidate);
+  if (!city) return { ok: false, message: language === 'en' ? 'Enter a city name from 2 to 64 characters.' : 'Введите название города длиной от 2 до 64 символов.' };
+  const previousCity = readSettings().weatherCity;
+  writeSettings({ weatherCity: city });
+  weatherCache = null;
+  const result = await getWeather(language, true);
+  if (result.ok) return result;
+  writeSettings({ weatherCity: previousCity || DEFAULT_WEATHER_CITY });
+  weatherCache = null;
+  return result;
 }
 
 function appAllowedForProfile(item, profile = readSettings().activeProfile) {
@@ -1035,9 +1173,53 @@ function runSystemCommand(command, args = [], options = {}) {
       maxBuffer: options.maxBuffer || 2 * 1024 * 1024,
       env: options.env || process.env
     }, (error, stdout, stderr) => {
-      if (error) resolve({ ok: false, message: String(stderr || error.message).trim() });
-      else resolve({ ok: true, message: stdout.trim() });
+      resolve(commandResult(error, stdout, stderr));
     });
+  });
+}
+
+function systemExecutable(name) {
+  const absolutePath = path.join('/usr/bin', name);
+  return fs.existsSync(absolutePath) ? absolutePath : name;
+}
+
+function releaseKeyPath() {
+  const candidates = [
+    path.join(process.resourcesPath, 'release-key.asc'),
+    '/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-tv-os'
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fs.statSync(candidate).isFile()) return fs.realpathSync(candidate);
+    } catch {
+      // Следующий путь позволяет восстановиться после неполной старой установки.
+    }
+  }
+  return null;
+}
+
+function runPrivilegedCommand(command, args, timeout) {
+  return new Promise((resolve) => {
+    const pkexecPath = systemExecutable('pkexec');
+    const child = spawn(pkexecPath, [command, ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    let timer;
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(commandResult(error, stdout, stderr));
+    };
+    child.stdout.on('data', (chunk) => { stdout += String(chunk); });
+    child.stderr.on('data', (chunk) => { stderr += String(chunk); });
+    child.on('error', finish);
+    child.on('close', (code) => finish(code === 0 ? null : Object.assign(new Error(`pkexec завершился с кодом ${code}`), { code })));
+    timer = setTimeout(() => {
+      child.kill('SIGTERM');
+      finish(Object.assign(new Error('Превышено время ожидания подтверждения.'), { code: 'ETIMEDOUT' }));
+    }, timeout);
   });
 }
 
@@ -1888,6 +2070,8 @@ ipcMain.handle('settings:get', async () => {
   return { ok: true, preferences, audio, wifi, bluetooth, displays, autologin: getAutologinState(), cec: { ok: true, ...cecState }, power: { ok: true, ...preferences.power } };
 });
 ipcMain.handle('settings:get-preferences', () => publicPreferences());
+ipcMain.handle('weather:get', (_event, language, force) => getWeather(language, Boolean(force)));
+ipcMain.handle('weather:set-city', (_event, city, language) => setWeatherCity(city, language));
 ipcMain.handle('onboarding:complete', () => {
   writeSettings({ onboardingComplete: true });
   return { ok: true, preferences: publicPreferences() };

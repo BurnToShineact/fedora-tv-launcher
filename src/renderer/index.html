@@ -118,19 +118,38 @@
         <h1 id="hero-title">Добрый день!</h1>
         <p id="hero-description">Веб-сервисы и приложения Fedora — в одном месте.</p>
       </div>
-      <div class="hero-hints" id="hero-hints" aria-label="Подсказки управления">
-        <span><kbd>← ↑ ↓ →</kbd><b>Выбор</b></span>
-        <span><kbd>OK</kbd><b>Открыть</b></span>
-        <span><kbd>Home</kbd><b>Домой</b></span>
+      <div class="home-dashboard" data-nav-zone="dashboard" data-nav-order="1" aria-label="Сегодня">
+        <button class="dashboard-card weather-card focusable" id="weather-card" type="button" aria-label="Обновить погоду">
+          <span class="weather-icon" id="weather-icon" aria-hidden="true">◌</span>
+          <span class="weather-copy">
+            <span class="dashboard-eyebrow" id="weather-location">Погода</span>
+            <strong id="weather-temperature">—°</strong>
+            <span id="weather-condition">Загружаем прогноз…</span>
+          </span>
+          <span class="weather-meta">
+            <span id="weather-range">—</span>
+            <span id="weather-daylight">—</span>
+          </span>
+          <span class="daylight-track" aria-hidden="true"><i id="weather-daylight-progress"></i></span>
+          <span class="weather-source">Open‑Meteo</span>
+        </button>
+        <button class="dashboard-card shuffle-card focusable" id="shuffle-card" type="button" aria-label="Выбрать случайное приложение">
+          <span class="shuffle-icon" id="shuffle-icon" aria-hidden="true">↝</span>
+          <span class="shuffle-copy">
+            <span class="dashboard-eyebrow" id="shuffle-eyebrow">Вечерний выбор</span>
+            <strong id="shuffle-title">Что включить?</strong>
+            <span id="shuffle-description">Нажмите — подберём приложение</span>
+          </span>
+        </button>
       </div>
     </section>
 
     <section>
       <div class="section-title"><h2>Приложения</h2><span id="hint">← → ↑ ↓ выбор · OK открыть</span></div>
-      <div class="app-grid" id="app-grid" data-nav-zone="apps" data-nav-order="1" aria-label="Приложения"></div>
+      <div class="app-grid" id="app-grid" data-nav-zone="apps" data-nav-order="2" aria-label="Приложения"></div>
     </section>
 
-    <footer class="footer-actions" data-nav-zone="system" data-nav-order="2">
+    <footer class="footer-actions" data-nav-zone="system" data-nav-order="3">
       <button class="footer-button focusable" data-action="logout"><span>⇥</span><b data-i18n="logout">Сменить пользователя</b></button>
       <button class="footer-button focusable" data-action="suspend"><span>◐</span><b data-i18n="sleep">Сон</b></button>
       <button class="footer-button focusable" data-action="reboot"><span>↻</span><b data-i18n="reboot">Перезагрузка</b></button>
@@ -399,6 +418,15 @@
         <div class="settings-heading"><div><p class="eyebrow" data-i18n="screensaverGroup">Экран</p><h3 data-i18n="screensaverTitle">Заставка с часами</h3></div></div>
         <p class="panel-description" data-i18n="screensaverDescription">Показывается только на домашнем экране; видео и открытые приложения не прерываются.</p>
         <label class="system-field"><span data-i18n="screensaverAfter">Включать после</span><select class="focusable" id="screensaver-timeout"><option value="0" data-i18n="never">Никогда</option><option value="1">1 мин</option><option value="5">5 мин</option><option value="10">10 мин</option><option value="20">20 мин</option><option value="30">30 мин</option></select></label>
+      </section>
+      <section class="settings-section" data-settings-category="appearance" data-nav-zone="settings-weather" data-nav-order="4" hidden>
+        <div class="settings-heading"><div><p class="eyebrow" data-i18n="weatherGroup">Главный экран</p><h3 data-i18n="weatherTitle">Погода</h3></div></div>
+        <p class="panel-description" data-i18n="weatherDescription">Укажите город для прогноза на домашнем экране. Данные обновляются примерно раз в 15 минут.</p>
+        <form class="weather-settings-form" id="weather-city-form">
+          <label class="system-field"><span data-i18n="weatherCity">Город</span><input class="focusable" id="weather-city" type="text" minlength="2" maxlength="64" autocomplete="off" placeholder="Москва"></label>
+          <button class="dialog-button focusable" id="weather-city-save" type="submit" data-i18n="weatherSave">Сохранить и проверить</button>
+        </form>
+        <p class="weather-settings-status" id="weather-settings-status" role="status"></p>
       </section>
       <section class="settings-section" data-settings-category="apps" data-nav-zone="settings-apps" data-nav-order="2" hidden>
         <div class="settings-heading"><div><p class="eyebrow" data-i18n="apps">Приложения</p><h3 data-i18n="myApps">Мои приложения</h3></div></div>

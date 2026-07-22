@@ -7,4 +7,4 @@ Exec=/usr/libexec/fedora-tv-os-session
 TryExec=/usr/bin/labwc
 Type=Application
 DesktopNames=FedoraTV
-
+X-GDM-SessionRegisters=true

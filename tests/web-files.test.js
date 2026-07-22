@@ -5,7 +5,8 @@ const {
   cleanBrowserUserAgent,
   fileKind,
   isInsideFileBrowserRoots,
-  isSecureWebUrl
+  isSecureWebUrl,
+  normalizeWeatherCity
 } = require('../src/lib/system-utils');
 
 test('cleanBrowserUserAgent hides Electron product tokens', () => {
@@ -14,6 +15,13 @@ test('cleanBrowserUserAgent hides Electron product tokens', () => {
     'Mozilla/5.0 Chrome/150.0 Safari/537.36'
   );
   assert.equal(cleanBrowserUserAgent(null), '');
+});
+
+test('normalizeWeatherCity trims safe city labels and rejects invalid lengths', () => {
+  assert.equal(normalizeWeatherCity('  Нижний   Новгород  '), 'Нижний Новгород');
+  assert.equal(normalizeWeatherCity('New\u0000 York'), 'New York');
+  assert.equal(normalizeWeatherCity('A'), '');
+  assert.equal(normalizeWeatherCity('x'.repeat(65)), '');
 });
 
 test('isSecureWebUrl accepts only valid HTTPS URLs', () => {

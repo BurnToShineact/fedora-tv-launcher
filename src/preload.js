@@ -32,6 +32,8 @@ contextBridge.exposeInMainWorld('tv', {
   setBrowserKeyboard: (visible) => ipcRenderer.invoke('browser:keyboard', visible),
   keyboardInput: (input) => ipcRenderer.invoke('keyboard:input', input),
   getPreferences: () => ipcRenderer.invoke('settings:get-preferences'),
+  getWeather: (language, force = false) => ipcRenderer.invoke('weather:get', language, force),
+  setWeatherCity: (city, language) => ipcRenderer.invoke('weather:set-city', city, language),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   completeOnboarding: () => ipcRenderer.invoke('onboarding:complete'),
   getDiagnostics: () => ipcRenderer.invoke('diagnostics:get'),
