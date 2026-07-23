@@ -11,6 +11,9 @@ const browserRefreshButton = document.getElementById('browser-refresh');
 const browserPlayButton = document.getElementById('browser-play');
 const browserFullscreenButton = document.getElementById('browser-fullscreen');
 const browserKeyboardButton = document.getElementById('browser-keyboard');
+const browserNetwork = document.getElementById('browser-network');
+const browserBluetooth = document.getElementById('browser-bluetooth');
+const browserVolume = document.getElementById('browser-volume');
 const browserFocusButton = document.getElementById('browser-focus');
 const browserTitle = document.getElementById('browser-title');
 const browserUrl = document.getElementById('browser-url');
@@ -228,9 +231,12 @@ let weatherLoading = false;
 let weatherSaving = false;
 let contentOpening = false;
 let currentMovieSuggestion = null;
+let movieSuggestionLoading = false;
+let quickPanelOverBrowser = false;
 let activeAppsCache = [];
 const rememberedFocus = new WeakMap();
 const overlayReturnFocus = new WeakMap();
+const MOVIE_ROTATION_INTERVAL_MS = 5 * 60 * 1000;
 
 const translations = {
   ru: {
@@ -538,7 +544,7 @@ function localizedAppTitle(app) {
 
 function renderShuffleCard() {
   const english = currentLanguage === 'en';
-  shuffleEyebrow.textContent = english ? 'Kinopoisk · Top 250' : 'Кинопоиск · Top 250';
+  shuffleEyebrow.textContent = english ? 'What to watch? · Kinopoisk Top 250' : 'Что посмотреть? · Кинопоиск Top 250';
   if (!currentMovieSuggestion) {
     shufflePoster.src = '../../assets/posters/movie-night.webp';
     shuffleTitle.textContent = english ? 'Picking a movie…' : 'Подбираем фильм…';
@@ -557,10 +563,23 @@ function renderShuffleCard() {
 }
 
 async function refreshMovieSuggestion(showMessage = false) {
-  currentMovieSuggestion = await window.tv.getMovieSuggestion();
-  shuffleCard.classList.add('picked');
-  renderShuffleCard();
-  if (showMessage) showToast(currentLanguage === 'en' ? 'Here is another movie' : 'Предлагаю другой фильм');
+  if (movieSuggestionLoading) return currentMovieSuggestion;
+  movieSuggestionLoading = true;
+  try {
+    const previousId = currentMovieSuggestion?.kinopoiskId;
+    let suggestion = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      suggestion = await window.tv.getMovieSuggestion();
+      if (!previousId || suggestion?.kinopoiskId !== previousId) break;
+    }
+    currentMovieSuggestion = suggestion;
+    shuffleCard.classList.add('picked');
+    renderShuffleCard();
+    if (showMessage) showToast(currentLanguage === 'en' ? 'Here is another movie' : 'Предлагаю другой фильм');
+    return currentMovieSuggestion;
+  } finally {
+    movieSuggestionLoading = false;
+  }
 }
 
 function openWeatherPicker() {
@@ -1290,8 +1309,25 @@ function updateQuickPanelHeading(section = 'sound') {
   quickPanelTitle.textContent = sound ? t('soundTitle') : bluetooth ? t('bluetoothTitle') : t('networkTitle');
 }
 
+function quickPanelTriggers(section) {
+  if (section === 'wifi') return [topbarNetwork, browserNetwork];
+  if (section === 'bluetooth') return [topbarBluetooth, browserBluetooth];
+  return [topbarVolume, browserVolume];
+}
+
+function setQuickPanelExpanded(section = null) {
+  for (const candidate of ['sound', 'wifi', 'bluetooth']) {
+    for (const button of quickPanelTriggers(candidate)) {
+      button.setAttribute('aria-expanded', String(candidate === section));
+    }
+  }
+}
+
 function openQuickPanel(section = 'sound') {
   overlayReturnFocus.set(quickPanel, document.activeElement);
+  quickPanelOverBrowser = browserOpen;
+  quickPanel.classList.toggle('from-browser', quickPanelOverBrowser);
+  if (quickPanelOverBrowser) window.tv.setConfirmationVisible(true);
   quickPanel.dataset.section = section;
   quickSoundSection.hidden = section !== 'sound';
   quickWifiSection.hidden = section !== 'wifi';
@@ -1299,9 +1335,7 @@ function openQuickPanel(section = 'sound') {
   updateQuickPanelHeading(section);
   quickPanel.hidden = false;
   document.body.classList.add('quick-panel-open');
-  topbarVolume.setAttribute('aria-expanded', String(section === 'sound'));
-  topbarNetwork.setAttribute('aria-expanded', String(section === 'wifi'));
-  topbarBluetooth.setAttribute('aria-expanded', String(section === 'bluetooth'));
+  setQuickPanelExpanded(section);
   const target = section === 'wifi' ? quickWifiToggle : section === 'bluetooth' ? quickBluetoothToggle : quickVolumeSlider;
   requestAnimationFrame(() => refreshFocusables(target));
   if (section === 'bluetooth') window.tv.getBluetooth().then(renderBluetooth).catch((error) => showToast(error.message));
@@ -1312,9 +1346,10 @@ function closeQuickPanel() {
   if (keyboardOpen) setKeyboardVisible(false);
   quickPanel.hidden = true;
   document.body.classList.remove('quick-panel-open');
-  topbarVolume.setAttribute('aria-expanded', 'false');
-  topbarNetwork.setAttribute('aria-expanded', 'false');
-  topbarBluetooth.setAttribute('aria-expanded', 'false');
+  setQuickPanelExpanded();
+  if (quickPanelOverBrowser) window.tv.setConfirmationVisible(false);
+  quickPanelOverBrowser = false;
+  quickPanel.classList.remove('from-browser');
   refreshFocusables(overlayReturnFocus.get(quickPanel) || 0);
 }
 
@@ -1336,11 +1371,13 @@ function renderAudio(state = {}) {
   muteToggle.classList.toggle('active', Boolean(state.muted));
   quickMuteToggle.textContent = state.muted ? t('unmute') : t('mute');
   quickMuteToggle.classList.toggle('active', Boolean(state.muted));
-  const topbarVolumeIcon = topbarVolume.querySelector('i');
-  topbarVolumeIcon.className = `volume-symbol${state.muted ? ' muted' : ''}`;
-  topbarVolumeIcon.innerHTML = volumeIconMarkup(state.volume, Boolean(state.muted));
-  topbarVolume.querySelector('b').textContent = state.muted ? (currentLanguage === 'en' ? 'Muted' : 'Без звука') : `${state.volume}%`;
-  topbarVolume.classList.toggle('inactive', Boolean(state.muted));
+  for (const volumeButton of [topbarVolume, browserVolume]) {
+    const volumeIcon = volumeButton.querySelector('i');
+    volumeIcon.className = `volume-symbol${state.muted ? ' muted' : ''}`;
+    volumeIcon.innerHTML = volumeIconMarkup(state.volume, Boolean(state.muted));
+    volumeButton.querySelector('b').textContent = state.muted ? (currentLanguage === 'en' ? 'Muted' : 'Без звука') : `${state.volume}%`;
+    volumeButton.classList.toggle('inactive', Boolean(state.muted));
+  }
   const selectedOutput = audioOutput.value;
   audioOutput.replaceChildren();
   for (const output of state.outputs || []) {
@@ -1562,10 +1599,12 @@ function renderWifi(state = {}) {
   wifiToggle.setAttribute('aria-checked', String(Boolean(state.enabled)));
   quickWifiToggle.setAttribute('aria-checked', String(Boolean(state.enabled)));
   const activeNetwork = state.networks?.find((network) => network.active);
-  renderWifiSignal(topbarNetwork.querySelector('i'), activeNetwork?.signal, Boolean(state.enabled));
+  for (const networkButton of [topbarNetwork, browserNetwork]) {
+    renderWifiSignal(networkButton.querySelector('i'), activeNetwork?.signal, Boolean(state.enabled));
+    networkButton.querySelector('b').textContent = activeNetwork?.ssid || (state.enabled ? 'Wi‑Fi' : (currentLanguage === 'en' ? 'Off' : 'Выкл.'));
+    networkButton.classList.toggle('inactive', !state.enabled);
+  }
   renderWifiSignal(quickNetworkIcon, activeNetwork?.signal, Boolean(state.enabled));
-  topbarNetwork.querySelector('b').textContent = activeNetwork?.ssid || (state.enabled ? 'Wi‑Fi' : (currentLanguage === 'en' ? 'Off' : 'Выкл.'));
-  topbarNetwork.classList.toggle('inactive', !state.enabled);
   quickNetworkState.textContent = activeNetwork?.ssid || (state.enabled ? (currentLanguage === 'en' ? 'Select a network' : 'Выберите сеть') : t('wifiOff'));
   renderWifiNetworks(wifiList, state, 'settings');
   renderWifiNetworks(quickWifiList, state, 'quick');
@@ -1581,13 +1620,15 @@ function renderBluetooth(state = {}) {
   bluetoothScan.disabled = !enabled;
   quickBluetoothScan.disabled = !enabled;
   const connected = state.devices?.find((device) => device.connected);
-  const topbarIcon = topbarBluetooth.querySelector('i');
-  topbarIcon.className = `bluetooth-symbol${enabled ? '' : ' off'}${connected ? ' connected' : ''}`;
-  topbarBluetooth.querySelector('b').textContent = connected?.name
-    || (state.available === false
-      ? (currentLanguage === 'en' ? 'Unavailable' : 'Недоступно')
-      : enabled ? 'Bluetooth' : (currentLanguage === 'en' ? 'Off' : 'Выкл.'));
-  topbarBluetooth.classList.toggle('inactive', !enabled);
+  for (const bluetoothButton of [topbarBluetooth, browserBluetooth]) {
+    const bluetoothIcon = bluetoothButton.querySelector('i');
+    bluetoothIcon.className = `bluetooth-symbol${enabled ? '' : ' off'}${connected ? ' connected' : ''}`;
+    bluetoothButton.querySelector('b').textContent = connected?.name
+      || (state.available === false
+        ? (currentLanguage === 'en' ? 'Unavailable' : 'Недоступно')
+        : enabled ? 'Bluetooth' : (currentLanguage === 'en' ? 'Off' : 'Выкл.'));
+    bluetoothButton.classList.toggle('inactive', !enabled);
+  }
   quickBluetoothState.textContent = connected?.name
     || (enabled ? (currentLanguage === 'en' ? 'Select a device' : 'Выберите устройство') : t('bluetoothOff'));
   renderBluetoothDevices(bluetoothList, state);
@@ -2125,11 +2166,23 @@ async function loadApps() {
     if (!quickPanel.hidden && quickPanel.dataset.section === 'sound') return closeQuickPanel();
     openQuickPanel('sound');
   });
+  browserVolume.addEventListener('click', () => {
+    if (!quickPanel.hidden && quickPanel.dataset.section === 'sound') return closeQuickPanel();
+    openQuickPanel('sound');
+  });
   topbarNetwork.addEventListener('click', () => {
     if (!quickPanel.hidden && quickPanel.dataset.section === 'wifi') return closeQuickPanel();
     openQuickPanel('wifi');
   });
+  browserNetwork.addEventListener('click', () => {
+    if (!quickPanel.hidden && quickPanel.dataset.section === 'wifi') return closeQuickPanel();
+    openQuickPanel('wifi');
+  });
   topbarBluetooth.addEventListener('click', () => {
+    if (!quickPanel.hidden && quickPanel.dataset.section === 'bluetooth') return closeQuickPanel();
+    openQuickPanel('bluetooth');
+  });
+  browserBluetooth.addEventListener('click', () => {
     if (!quickPanel.hidden && quickPanel.dataset.section === 'bluetooth') return closeQuickPanel();
     openQuickPanel('bluetooth');
   });
@@ -2145,7 +2198,9 @@ async function loadApps() {
   });
   quickVolumeSlider.addEventListener('input', () => {
     quickVolumeValue.textContent = `${quickVolumeSlider.value}%`;
-    topbarVolume.querySelector('b').textContent = `${quickVolumeSlider.value}%`;
+    for (const volumeButton of [topbarVolume, browserVolume]) {
+      volumeButton.querySelector('b').textContent = `${quickVolumeSlider.value}%`;
+    }
   });
   quickVolumeSlider.addEventListener('change', async () => {
     const result = await window.tv.setVolume(quickVolumeSlider.value);
@@ -2416,9 +2471,9 @@ function closeAllOverlays() {
   filesBackdrop.hidden = true;
   manageBackdrop.hidden = true;
   document.body.classList.remove('quick-panel-open');
-  topbarVolume.setAttribute('aria-expanded', 'false');
-  topbarNetwork.setAttribute('aria-expanded', 'false');
-  topbarBluetooth.setAttribute('aria-expanded', 'false');
+  setQuickPanelExpanded();
+  quickPanelOverBrowser = false;
+  quickPanel.classList.remove('from-browser');
   activeAppsButton.setAttribute('aria-expanded', 'false');
   activeSettingsCategory = null;
   confirmHandler = null;
@@ -2579,5 +2634,8 @@ window.addEventListener('online', () => {
 });
 updateClock();
 setInterval(updateClock, 1000);
+setInterval(() => {
+  refreshMovieSuggestion().catch(() => {});
+}, MOVIE_ROTATION_INTERVAL_MS);
 loadApps().catch((error) => showToast(error.message));
 requestAnimationFrame(pollGamepads);
