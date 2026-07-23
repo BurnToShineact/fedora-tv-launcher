@@ -138,8 +138,11 @@
           <span class="weather-source">Open‑Meteo · выбрать город</span>
         </button>
         <button class="dashboard-card shuffle-card movie-card focusable" id="shuffle-card" type="button" aria-label="Открыть предложенный фильм">
-          <span class="shuffle-icon movie-icon" id="shuffle-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 4v16M16 4v16M5 8h3M16 8h3M5 16h3M16 16h3"/></svg>
+          <span class="shuffle-icon movie-poster" id="shuffle-icon" aria-hidden="true">
+            <img src="../../assets/posters/movie-night.webp" alt="">
+            <span class="movie-poster-badge">
+              <svg viewBox="0 0 24 24"><path d="M9 7.5 17 12l-8 4.5z"/></svg>
+            </span>
           </span>
           <span class="shuffle-copy">
             <span class="dashboard-eyebrow" id="shuffle-eyebrow">Кинопоиск · Top 250</span>
@@ -508,6 +511,10 @@
         <button class="files-toolbar-button focusable" id="files-up" type="button" aria-label="На уровень выше">↑</button>
         <div class="files-location"><span data-i18n="location">Расположение</span><strong id="files-path">Устройства и папки</strong></div>
         <button class="files-toolbar-button focusable" id="files-refresh" type="button" aria-label="Обновить">↻</button>
+      </div>
+      <div class="files-device-status" id="files-device-status" hidden aria-live="polite">
+        <span class="files-device-status-icon" aria-hidden="true">▱</span>
+        <span><strong id="files-device-status-title"></strong><small id="files-device-status-detail"></small></span>
       </div>
       <div class="files-list" id="files-list" data-nav-zone="files-list" data-nav-order="2" aria-live="polite"></div>
       <p class="files-hint" data-i18n="filesHint">Выберите папку для перехода или файл, чтобы открыть его в подходящем приложении.</p>

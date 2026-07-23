@@ -19,6 +19,7 @@ const {
   normalizeDisplayOutput,
   normalizeWeatherCity,
   parseBluetoothDeviceLines,
+  removableVolumesFromLsblk,
   parseVolume,
   parseWpctlSinks,
   rpmSignatureIsValid,
@@ -48,6 +49,9 @@ let lastIdleActionAt = 0;
 let pendingLauncherAction = process.argv.includes('--poweroff') ? 'poweroff' : null;
 let cecChild = null;
 let cecRestartTimer = null;
+let storageMonitorChild = null;
+let storageMonitorRestartTimer = null;
+let knownRemovableRoots = [];
 let cecState = { enabled: true, available: false, connected: false, message: 'HDMI-CEC ещё не запущен.' };
 let applicationQuitting = false;
 let weatherCache = null;
@@ -1405,11 +1409,21 @@ function fileBrowserRoots() {
     { path: home, title: 'Домашняя папка', titleEn: 'Home', icon: '⌂' },
     { path: path.join(home, 'Downloads'), title: 'Загрузки', titleEn: 'Downloads', icon: '↓' },
     { path: path.join(home, 'Videos'), title: 'Видео', titleEn: 'Videos', icon: '▶' },
-    { path: path.join(home, 'Pictures'), title: 'Изображения', titleEn: 'Pictures', icon: '▧' },
+    { path: path.join(home, 'Pictures'), title: 'Изображения', titleEn: 'Pictures', icon: '▧' }
+  ];
+  const mountParents = [
     { path: path.join('/run/media', userName), title: 'Съёмные носители', titleEn: 'Removable media', icon: '▱' },
     { path: path.join('/media', userName), title: 'Подключённые диски', titleEn: 'Mounted drives', icon: '▱' },
     { path: '/mnt', title: 'Другие диски', titleEn: 'Other drives', icon: '▱' }
   ];
+  candidates.push(...knownRemovableRoots);
+  for (const parent of mountParents) {
+    const containsKnownVolume = knownRemovableRoots.some((root) => {
+      const relative = path.relative(parent.path, root.path);
+      return relative && !relative.startsWith('..') && !path.isAbsolute(relative);
+    });
+    if (!containsKnownVolume) candidates.push(parent);
+  }
   const unique = new Map();
   for (const item of candidates) {
     try {
@@ -1420,6 +1434,100 @@ function fileBrowserRoots() {
     }
   }
   return [...unique.values()];
+}
+
+async function scanRemovableVolumes() {
+  const result = await runSystemCommand(systemExecutable('lsblk'), [
+    '--json', '--paths', '--bytes',
+    '--output', 'NAME,TYPE,FSTYPE,LABEL,MOUNTPOINTS,RM,RO,TRAN,SIZE'
+  ], { timeout: 8000, env: SYSTEM_COMMAND_ENV });
+  return {
+    ok: result.ok,
+    message: result.message,
+    volumes: result.ok ? removableVolumesFromLsblk(result.stdout || result.message) : []
+  };
+}
+
+function rememberRemovableRoots(volumes = []) {
+  const roots = [];
+  const unique = new Set();
+  for (const volume of volumes) {
+    for (const mountPoint of volume.mountPoints || []) {
+      try {
+        const realPath = fs.realpathSync(mountPoint);
+        if (realPath === '/' || unique.has(realPath) || !fs.statSync(realPath).isDirectory()) continue;
+        unique.add(realPath);
+        const fallbackName = path.basename(realPath) || 'USB';
+        roots.push({
+          path: realPath,
+          title: volume.label || fallbackName,
+          titleEn: volume.label || fallbackName,
+          icon: '▱',
+          device: true,
+          fstype: volume.fstype,
+          readOnly: volume.readOnly,
+          size: volume.size
+        });
+      } catch {
+        // Носитель мог быть извлечён во время обновления списка.
+      }
+    }
+  }
+  knownRemovableRoots = roots;
+}
+
+function conciseMountError(message) {
+  const detail = String(message || '').replace(/\s+/g, ' ').trim();
+  if (/not authorized|not permitted|authentication/i.test(detail)) {
+    return 'системная служба не разрешила подключение в текущей сессии';
+  }
+  if (/not found|no such/i.test(detail)) return 'накопитель был извлечён';
+  return detail.slice(0, 180) || 'неизвестная ошибка подключения';
+}
+
+async function ensureRemovableMediaMounted() {
+  let scan = await scanRemovableVolumes();
+  if (!scan.ok) {
+    knownRemovableRoots = [];
+    return {
+      available: false,
+      detected: 0,
+      mounted: 0,
+      newlyMounted: 0,
+      failed: 0,
+      message: 'Не удалось проверить подключённые накопители.'
+    };
+  }
+
+  const unmounted = scan.volumes.filter((volume) => !volume.mounted);
+  const errors = [];
+  let newlyMounted = 0;
+  if (unmounted.length && !fs.existsSync(systemExecutable('udisksctl'))) {
+    errors.push('не установлена системная служба udisks2');
+  } else {
+    for (const volume of unmounted) {
+      const result = await runSystemCommand(systemExecutable('udisksctl'), [
+        'mount', '--block-device', volume.devicePath, '--no-user-interaction'
+      ], { timeout: 15000, env: SYSTEM_COMMAND_ENV });
+      if (result.ok) newlyMounted += 1;
+      else errors.push(conciseMountError(result.message));
+    }
+  }
+
+  if (unmounted.length) {
+    const refreshed = await scanRemovableVolumes();
+    if (refreshed.ok) scan = refreshed;
+  }
+  rememberRemovableRoots(scan.volumes);
+  const mounted = scan.volumes.filter((volume) => volume.mounted).length;
+  return {
+    available: true,
+    detected: scan.volumes.length,
+    mounted,
+    newlyMounted,
+    failed: errors.length,
+    message: errors[0] || ''
+  };
 }
 
 function resolveBrowsablePath(candidate, roots = fileBrowserRoots()) {
@@ -1433,6 +1541,7 @@ function resolveBrowsablePath(candidate, roots = fileBrowserRoots()) {
 }
 
 async function listFiles(candidatePath) {
+  const removable = candidatePath ? null : await ensureRemovableMediaMounted();
   const roots = fileBrowserRoots();
   if (!candidatePath) {
     return {
@@ -1445,8 +1554,13 @@ async function listFiles(candidatePath) {
         path: root.path,
         directory: true,
         kind: 'root',
-        icon: root.icon
-      }))
+        icon: root.icon,
+        device: Boolean(root.device),
+        fstype: root.fstype || '',
+        readOnly: Boolean(root.readOnly),
+        size: root.size || null
+      })),
+      removable
     };
   }
 
@@ -1638,6 +1752,54 @@ function setupDisplayHotplug() {
   for (const eventName of ['display-added', 'display-removed', 'display-metrics-changed']) screen.on(eventName, changed);
 }
 
+function stopStorageMonitor() {
+  clearTimeout(storageMonitorRestartTimer);
+  storageMonitorRestartTimer = null;
+  if (storageMonitorChild) {
+    storageMonitorChild.kill('SIGTERM');
+    storageMonitorChild = null;
+  }
+}
+
+function startStorageMonitor() {
+  if (!isTvSession || safeMode || applicationQuitting || storageMonitorChild) return;
+  const udevadmPath = systemExecutable('udevadm');
+  if (!fs.existsSync(udevadmPath)) return;
+  try {
+    const child = spawn(udevadmPath, [
+      'monitor', '--udev', '--property', '--subsystem-match=block'
+    ], { stdio: ['ignore', 'pipe', 'ignore'], env: SYSTEM_COMMAND_ENV });
+    storageMonitorChild = child;
+    let buffer = '';
+    let notificationTimer = null;
+    child.stdout.on('data', (chunk) => {
+      buffer = `${buffer}${String(chunk)}`.slice(-8192);
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() || '';
+      if (!lines.some((line) => /^ACTION=(?:add|remove)$/i.test(line.trim()) || /\b(?:add|remove)\b.*\/block\//i.test(line))) return;
+      clearTimeout(notificationTimer);
+      notificationTimer = setTimeout(() => {
+        knownRemovableRoots = [];
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('system:hardware-changed', { kind: 'storage' });
+        }
+      }, 850);
+    });
+    child.on('error', () => {
+      if (storageMonitorChild === child) storageMonitorChild = null;
+    });
+    child.on('close', () => {
+      clearTimeout(notificationTimer);
+      if (storageMonitorChild === child) storageMonitorChild = null;
+      if (!applicationQuitting) {
+        storageMonitorRestartTimer = setTimeout(startStorageMonitor, 5000);
+      }
+    });
+  } catch {
+    storageMonitorChild = null;
+  }
+}
+
 function startIdleMonitor() {
   if (!isTvSession) return;
   setInterval(async () => {
@@ -1671,6 +1833,7 @@ app.whenReady().then(() => {
   initializeMediaComponents();
   startIdleMonitor();
   setupDisplayHotplug();
+  startStorageMonitor();
   startCecBridge();
   if (isTvSession && !safeMode) setTimeout(() => applySavedDisplayConfiguration(), 1600);
   mainWindow.webContents.once('did-finish-load', () => {
@@ -1695,6 +1858,7 @@ app.whenReady().then(() => {
 
 app.on('will-quit', () => {
   applicationQuitting = true;
+  stopStorageMonitor();
   stopCecBridge();
   globalShortcut.unregisterAll();
 });

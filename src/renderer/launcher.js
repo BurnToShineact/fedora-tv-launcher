@@ -66,6 +66,9 @@ const filesUp = document.getElementById('files-up');
 const filesRefresh = document.getElementById('files-refresh');
 const filesPath = document.getElementById('files-path');
 const filesList = document.getElementById('files-list');
+const filesDeviceStatus = document.getElementById('files-device-status');
+const filesDeviceStatusTitle = document.getElementById('files-device-status-title');
+const filesDeviceStatusDetail = document.getElementById('files-device-status-detail');
 const addForm = document.getElementById('add-app-form');
 const titleInput = document.getElementById('app-title');
 const urlInput = document.getElementById('app-url');
@@ -1154,11 +1157,41 @@ function fileIcon(entry) {
   return { root: '▱', folder: '▰', video: '▶', audio: '♪', image: '▧', document: '▤', archive: '▥', file: '·' }[entry.kind] || '·';
 }
 
+function renderRemovableStatus(status) {
+  filesDeviceStatus.hidden = true;
+  filesDeviceStatus.classList.remove('is-error');
+  if (!status || (status.available && !status.detected)) return;
+  const english = currentLanguage === 'en';
+  filesDeviceStatus.hidden = false;
+  if (!status.available) {
+    filesDeviceStatus.classList.add('is-error');
+    filesDeviceStatusTitle.textContent = english ? 'Drive service is unavailable' : 'Служба накопителей недоступна';
+    filesDeviceStatusDetail.textContent = english ? 'Try refreshing the list or restart the TV session.' : 'Обновите список или перезапустите TV-сессию.';
+    return;
+  }
+  if (!status.mounted) {
+    filesDeviceStatus.classList.add('is-error');
+    filesDeviceStatusTitle.textContent = english ? 'Could not connect the USB drive' : 'Не удалось подключить USB-накопитель';
+    filesDeviceStatusDetail.textContent = status.message || (english ? 'Reconnect the drive and refresh the list.' : 'Переподключите накопитель и обновите список.');
+    return;
+  }
+  filesDeviceStatus.classList.toggle('is-error', Boolean(status.failed));
+  filesDeviceStatusTitle.textContent = status.mounted === 1
+    ? (english ? 'USB drive is ready' : 'USB-накопитель готов')
+    : (english ? `${status.mounted} drives are ready` : `Подключено накопителей: ${status.mounted}`);
+  filesDeviceStatusDetail.textContent = status.failed
+    ? (status.message || (english ? 'One of the drives could not be connected.' : 'Один из накопителей подключить не удалось.'))
+    : status.newlyMounted
+      ? (english ? 'Connected automatically. Choose it below.' : 'Подключён автоматически — выберите его ниже.')
+      : (english ? 'Choose the drive below to browse its files.' : 'Выберите накопитель ниже, чтобы открыть файлы.');
+}
+
 function renderFiles(state = {}) {
   currentFilesState = state;
   filesPath.textContent = state.path || (currentLanguage === 'en' ? 'Devices and folders' : 'Устройства и папки');
   filesUp.disabled = !state.path;
   filesList.replaceChildren();
+  renderRemovableStatus(state.removable);
   if (!state.ok) {
     renderWifiEmptyState(filesList, state.message || (currentLanguage === 'en' ? 'This folder is unavailable.' : 'Папка недоступна.'));
     return;
@@ -1174,8 +1207,15 @@ function renderFiles(state = {}) {
     button.innerHTML = '<span class="file-icon"></span><span class="file-copy"><strong></strong><small></small></span><span class="file-open">›</span>';
     button.querySelector('.file-icon').textContent = fileIcon(entry);
     button.querySelector('strong').textContent = currentLanguage === 'en' && entry.nameEn ? entry.nameEn : entry.name;
-    const detail = entry.directory
-      ? (currentLanguage === 'en' ? 'Folder' : 'Папка')
+    const detail = entry.device
+      ? [
+        currentLanguage === 'en' ? 'USB drive' : 'USB-накопитель',
+        entry.fstype ? String(entry.fstype).toUpperCase() : '',
+        fileSizeLabel(entry.size),
+        entry.readOnly ? (currentLanguage === 'en' ? 'read only' : 'только чтение') : ''
+      ].filter(Boolean).join(' · ')
+      : entry.directory
+        ? (currentLanguage === 'en' ? 'Folder' : 'Папка')
       : [fileSizeLabel(entry.size), entry.modified ? new Intl.DateTimeFormat(currentLanguage === 'en' ? 'en-US' : 'ru-RU', { dateStyle: 'medium' }).format(entry.modified) : ''].filter(Boolean).join(' · ');
     button.querySelector('small').textContent = detail;
     button.addEventListener('click', async () => {
@@ -1190,10 +1230,27 @@ function renderFiles(state = {}) {
 
 async function navigateFiles(directoryPath = null, preferred = 0) {
   filesRefresh.disabled = true;
-  const result = await window.tv.listFiles(directoryPath);
-  filesRefresh.disabled = false;
+  let result;
+  try {
+    result = await window.tv.listFiles(directoryPath);
+  } catch (error) {
+    result = { ok: false, message: error?.message };
+  } finally {
+    filesRefresh.disabled = false;
+  }
   if (!result?.ok) {
     showToast(result?.message || (currentLanguage === 'en' ? 'Could not open folder' : 'Не удалось открыть папку'));
+    if (directoryPath) {
+      try {
+        const root = await window.tv.listFiles(null);
+        if (root?.ok) {
+          renderFiles(root);
+          refreshFocusables(filesList.querySelector('.file-row') || filesClose);
+        }
+      } catch {
+        // Сообщение об исходной ошибке уже показано.
+      }
+    }
     return;
   }
   renderFiles(result);
@@ -1204,6 +1261,7 @@ function openFilesPanel() {
   if (!quickPanel.hidden) closeQuickPanel();
   overlayReturnFocus.set(filesBackdrop, document.activeElement);
   filesBackdrop.hidden = false;
+  filesDeviceStatus.hidden = true;
   filesList.innerHTML = `<div class="empty-state">${currentLanguage === 'en' ? 'Loading files…' : 'Загружаем файлы…'}</div>`;
   refreshFocusables(filesClose);
   navigateFiles(null);
@@ -2490,7 +2548,12 @@ document.addEventListener('visibilitychange', resetAmbientTimer);
 window.tv.onHomeRequested(() => { closeAllOverlays(); refreshFocusables(); });
 window.tv.onBrowserToolbarRequested(() => refreshFocusables(0));
 window.tv.onActiveAppsChanged(renderActiveApps);
-window.tv.onHardwareChanged(async () => {
+window.tv.onHardwareChanged(async (change = {}) => {
+  if (change.kind === 'storage') {
+    if (!filesBackdrop.hidden) await navigateFiles(null, filesClose);
+    showToast(currentLanguage === 'en' ? 'USB drive connection changed' : 'Изменилось подключение USB-накопителя');
+    return;
+  }
   const result = await window.tv.getSettings();
   if (!result?.ok) return;
   renderAudio(result.audio);

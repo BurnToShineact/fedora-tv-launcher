@@ -8,7 +8,8 @@ const {
   fileKind,
   isInsideFileBrowserRoots,
   isSecureWebUrl,
-  normalizeWeatherCity
+  normalizeWeatherCity,
+  removableVolumesFromLsblk
 } = require('../src/lib/system-utils');
 const { MOVIES, randomTopMovie } = require('../src/data/kinopoisk-top250');
 
@@ -77,4 +78,73 @@ test('fileKind classifies supported media and document extensions', () => {
   assert.equal(fileKind('/tmp/backup.tar', false), 'archive');
   assert.equal(fileKind('/tmp/unknown.bin', false), 'file');
   assert.equal(fileKind('/tmp/folder.mp4', true), 'folder');
+});
+
+test('lsblk parser finds mountable USB partitions and inherits disk transport', () => {
+  const volumes = removableVolumesFromLsblk(JSON.stringify({
+    blockdevices: [
+      {
+        name: '/dev/sdb',
+        type: 'disk',
+        rm: false,
+        tran: 'usb',
+        children: [
+          {
+            name: '/dev/sdb1',
+            type: 'part',
+            fstype: 'exfat',
+            label: 'MOVIES',
+            mountpoints: [null],
+            rm: false,
+            ro: false,
+            size: 64000000000
+          },
+          {
+            name: '/dev/sdb2',
+            type: 'part',
+            fstype: 'swap',
+            mountpoints: ['[SWAP]'],
+            rm: false
+          }
+        ]
+      },
+      {
+        name: '/dev/nvme0n1p3',
+        type: 'part',
+        fstype: 'btrfs',
+        mountpoints: ['/'],
+        rm: false,
+        tran: 'nvme'
+      }
+    ]
+  }));
+  assert.deepEqual(volumes, [{
+    devicePath: '/dev/sdb1',
+    label: 'MOVIES',
+    fstype: 'exfat',
+    mountPoints: [],
+    mounted: false,
+    readOnly: false,
+    size: 64000000000
+  }]);
+});
+
+test('lsblk parser preserves mounted removable volume details and rejects invalid data', () => {
+  const volumes = removableVolumesFromLsblk(JSON.stringify({
+    blockdevices: [{
+      name: '/dev/mmcblk0p1',
+      type: 'part',
+      fstype: 'vfat',
+      label: ' CAMERA\u0000 ',
+      mountpoints: ['/run/media/tv/CAMERA'],
+      rm: true,
+      ro: '1',
+      size: '32000000000'
+    }]
+  }));
+  assert.equal(volumes[0].label, 'CAMERA');
+  assert.equal(volumes[0].mounted, true);
+  assert.equal(volumes[0].readOnly, true);
+  assert.equal(volumes[0].size, 32000000000);
+  assert.deepEqual(removableVolumesFromLsblk('not json'), []);
 });

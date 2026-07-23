@@ -93,6 +93,49 @@ function fileKind(filePath, directory) {
   return 'file';
 }
 
+function removableVolumesFromLsblk(output) {
+  let payload;
+  try {
+    payload = JSON.parse(String(output || ''));
+  } catch {
+    return [];
+  }
+
+  const volumes = [];
+  const ignoredFileSystems = new Set(['swap', 'crypto_luks', 'lvm2_member', 'linux_raid_member']);
+  const visit = (device = {}, parent = {}) => {
+    const removable = device.rm === true || device.rm === 1 || device.rm === '1' || parent.removable;
+    const transport = String(device.tran || parent.transport || '').toLowerCase();
+    const isPortable = removable || ['usb', 'mmc'].includes(transport);
+    const devicePath = String(device.name || '');
+    const fstype = String(device.fstype || '').trim();
+    const mountPoints = (Array.isArray(device.mountpoints) ? device.mountpoints : [device.mountpoint])
+      .filter((mountPoint) => typeof mountPoint === 'string' && path.isAbsolute(mountPoint));
+    if (
+      isPortable
+      && /^\/dev\/[a-z0-9._+/-]+$/i.test(devicePath)
+      && !devicePath.includes('/../')
+      && fstype
+      && !ignoredFileSystems.has(fstype.toLowerCase())
+    ) {
+      volumes.push({
+        devicePath,
+        label: String(device.label || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 120),
+        fstype,
+        mountPoints,
+        mounted: mountPoints.length > 0,
+        readOnly: device.ro === true || device.ro === 1 || device.ro === '1',
+        size: Math.max(0, Number(device.size) || 0)
+      });
+    }
+    for (const child of Array.isArray(device.children) ? device.children : []) {
+      visit(child, { removable: isPortable, transport });
+    }
+  };
+  for (const device of Array.isArray(payload?.blockdevices) ? payload.blockdevices : []) visit(device);
+  return volumes;
+}
+
 function parseVolume(output) {
   const match = String(output).match(/Volume:\s+([0-9.]+)/i);
   return { volume: match ? Math.round(Number(match[1]) * 100) : 0, muted: /\[MUTED\]/i.test(output) };
@@ -230,6 +273,7 @@ module.exports = {
   normalizeDisplayMode,
   normalizeDisplayOutput,
   parseBluetoothDeviceLines,
+  removableVolumesFromLsblk,
   parseVolume,
   parseWpctlSinks,
   rpmSignatureIsValid,

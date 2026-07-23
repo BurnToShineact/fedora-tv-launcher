@@ -76,5 +76,5 @@ contextBridge.exposeInMainWorld('tv', {
   onHomeRequested: (callback) => ipcRenderer.on('launcher:home', callback),
   onSystemActionRequested: (callback) => ipcRenderer.on('launcher:system-action', (_, action) => callback(action)),
   onUpdateState: (callback) => ipcRenderer.on('update:state', (_, state) => callback(state)),
-  onHardwareChanged: (callback) => ipcRenderer.on('system:hardware-changed', callback)
+  onHardwareChanged: (callback) => ipcRenderer.on('system:hardware-changed', (_event, change) => callback(change))
 });
