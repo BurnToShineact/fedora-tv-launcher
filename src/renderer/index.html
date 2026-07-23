@@ -116,11 +116,11 @@
       </section>
     </aside>
 
-    <section class="hero">
+    <section class="hero home-overview">
       <div class="hero-copy">
         <p class="eyebrow" id="hero-eyebrow">Домашний экран</p>
         <h1 id="hero-title">Добрый день!</h1>
-        <p id="hero-description">Веб-сервисы и приложения Fedora — в одном месте.</p>
+        <p id="hero-description">Выберите приложение или продолжите с того места, где остановились.</p>
       </div>
       <div class="home-dashboard" data-nav-zone="dashboard" data-nav-order="1" aria-label="Сегодня">
         <button class="dashboard-card weather-card focusable" id="weather-card" type="button" aria-label="Обновить погоду">
@@ -137,23 +137,35 @@
           <span class="daylight-track" aria-hidden="true"><i id="weather-daylight-progress"></i></span>
           <span class="weather-source">Open‑Meteo · выбрать город</span>
         </button>
-        <button class="dashboard-card shuffle-card focusable" id="shuffle-card" type="button" aria-label="Выбрать фильм или ролик">
-          <span class="shuffle-icon" id="shuffle-icon" aria-hidden="true">▶</span>
+        <button class="dashboard-card shuffle-card movie-card focusable" id="shuffle-card" type="button" aria-label="Открыть предложенный фильм">
+          <span class="shuffle-icon movie-icon" id="shuffle-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 4v16M16 4v16M5 8h3M16 8h3M5 16h3M16 16h3"/></svg>
+          </span>
           <span class="shuffle-copy">
-            <span class="dashboard-eyebrow" id="shuffle-eyebrow">Веб‑приложения</span>
-            <strong id="shuffle-title">Что включить?</strong>
-            <span id="shuffle-description">Фильм или короткий ролик</span>
+            <span class="dashboard-eyebrow" id="shuffle-eyebrow">Кинопоиск · Top 250</span>
+            <strong id="shuffle-title">Подбираем фильм…</strong>
+            <span id="shuffle-description">OK — найти · Menu — другой фильм</span>
           </span>
         </button>
       </div>
     </section>
 
-    <section>
-      <div class="section-title"><h2>Приложения</h2><span id="hint">← → ↑ ↓ выбор · OK открыть</span></div>
-      <div class="app-grid" id="app-grid" data-nav-zone="apps" data-nav-order="2" aria-label="Приложения"></div>
+    <section class="home-rail continue-section" id="continue-section" hidden>
+      <div class="section-title"><h2 data-i18n="continueWatching">Продолжить</h2><span>Открытые приложения сохраняют своё состояние</span></div>
+      <div class="app-rail continue-rail" id="continue-row" data-nav-zone="continue" data-nav-order="2" aria-label="Продолжить"></div>
     </section>
 
-    <footer class="footer-actions" data-nav-zone="system" data-nav-order="3">
+    <section class="home-rail favorites-section" id="favorites-section" hidden>
+      <div class="section-title"><h2 data-i18n="favorites">Избранное</h2><span>Удерживайте OK для действий</span></div>
+      <div class="app-rail" id="favorites-row" data-nav-zone="favorites" data-nav-order="3" aria-label="Избранные приложения"></div>
+    </section>
+
+    <section class="home-rail all-apps-section">
+      <div class="section-title"><h2 data-i18n="allApps">Все приложения</h2><span id="hint">← → выбор · ↑ ↓ раздел · OK открыть</span></div>
+      <div class="app-grid app-rail" id="app-grid" data-nav-zone="apps" data-nav-order="4" aria-label="Все приложения"></div>
+    </section>
+
+    <footer class="footer-actions" data-nav-zone="system" data-nav-order="5">
       <button class="footer-button focusable" data-action="logout"><span>⇥</span><b data-i18n="logout">Сменить пользователя</b></button>
       <button class="footer-button focusable" data-action="suspend"><span>◐</span><b data-i18n="sleep">Сон</b></button>
       <button class="footer-button focusable" data-action="reboot"><span>↻</span><b data-i18n="reboot">Перезагрузка</b></button>
@@ -179,25 +191,6 @@
         <button class="choice-chip focusable" type="button" data-weather-city="Екатеринбург">Екатеринбург</button>
       </div>
       <p class="weather-settings-status" id="weather-picker-status" role="status"></p>
-    </section>
-  </div>
-
-  <div class="panel-backdrop" id="content-backdrop" hidden>
-    <section class="panel compact-panel" role="dialog" aria-modal="true" aria-labelledby="content-picker-title">
-      <div class="panel-header">
-        <div><p class="eyebrow" data-i18n="contentFromWeb">Из веб‑приложений</p><h2 id="content-picker-title" data-i18n="whatToWatch">Что посмотреть?</h2></div>
-        <button class="icon-button focusable" id="content-picker-close" type="button" aria-label="Закрыть">×</button>
-      </div>
-      <p class="panel-description" data-i18n="contentPickerHint">Выберите формат и приложение — откроется готовая тематическая подборка.</p>
-      <div class="content-type-grid" data-nav-zone="content-types" data-nav-order="1">
-        <button class="content-type-card focusable selected" type="button" data-content-type="film"><span>▰</span><strong data-i18n="movieOption">Фильм</strong><small data-i18n="movieOptionHint">Полнометражное кино или документалка</small></button>
-        <button class="content-type-card focusable" type="button" data-content-type="video"><span>▶</span><strong data-i18n="videoOption">Ролик</strong><small data-i18n="videoOptionHint">Короткое видео по интересной теме</small></button>
-      </div>
-      <div class="content-source-heading"><strong data-i18n="openIn">Открыть в приложении</strong></div>
-      <div class="content-source-list" id="content-source-list" data-nav-zone="content-sources" data-nav-order="2" aria-live="polite"></div>
-      <div class="panel-actions" data-nav-zone="content-action" data-nav-order="3">
-        <button class="dialog-button focusable" id="content-open" type="button" data-i18n="pickContent">Подобрать и открыть</button>
-      </div>
     </section>
   </div>
 
@@ -274,7 +267,7 @@
   </div>
 
   <div class="panel-backdrop" id="manage-backdrop" hidden>
-    <section class="panel wide" role="dialog" aria-modal="true" aria-labelledby="manage-title">
+    <section class="panel wide settings-panel" role="dialog" aria-modal="true" aria-labelledby="manage-title">
       <div class="panel-header" data-nav-zone="settings-header" data-nav-order="0">
         <div><p class="eyebrow" data-i18n="settings">Настройки</p><h2 id="manage-title">Настройки</h2></div>
         <button class="icon-button focusable" data-manage-close aria-label="Закрыть">×</button>

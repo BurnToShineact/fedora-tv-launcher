@@ -5,6 +5,7 @@ const os = require('os');
 const crypto = require('crypto');
 const { execFile, spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
+const { randomTopMovie } = require('./data/kinopoisk-top250');
 const {
   POWER_DEFAULTS,
   buildContentSearchUrl,
@@ -1245,7 +1246,7 @@ function contentSources() {
     }));
 }
 
-async function openContentSuggestion(sourceId, requestedType, language) {
+async function openContentSuggestion(sourceId, requestedType, language, requestedMovie = '') {
   const type = requestedType === 'video' ? 'video' : 'film';
   const locale = language === 'en' ? 'en' : 'ru';
   let candidates = contentSources().filter((item) => type === 'video' || item.supportsFilm);
@@ -1254,7 +1255,10 @@ async function openContentSuggestion(sourceId, requestedType, language) {
   const source = candidates[crypto.randomInt(candidates.length)];
   const appItem = readApps().find((item) => item.id === source.id);
   const ideas = CONTENT_IDEAS[type][locale];
-  const [title, query] = ideas[crypto.randomInt(ideas.length)];
+  const [fallbackTitle, fallbackQuery] = ideas[crypto.randomInt(ideas.length)];
+  const movieTitle = String(requestedMovie || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 140);
+  const title = movieTitle || fallbackTitle;
+  const query = movieTitle ? `${movieTitle} фильм смотреть` : fallbackQuery;
   const targetUrl = buildContentSearchUrl(appItem.url, query);
   if (!targetUrl) return { ok: false, message: locale === 'en' ? 'This app does not support content discovery.' : 'Это приложение пока не поддерживает подбор контента.' };
   await openWebsite(appItem, targetUrl);
@@ -1865,7 +1869,8 @@ ipcMain.handle('active-apps:get', () => activeWebApps());
 ipcMain.handle('active-apps:activate', (_event, appId) => activateWebApp(appId));
 ipcMain.handle('active-apps:close', (_event, appId) => closeWebApp(appId));
 ipcMain.handle('content:sources', () => contentSources());
-ipcMain.handle('content:open', (_event, sourceId, type, language) => openContentSuggestion(sourceId, type, language));
+ipcMain.handle('content:movie-suggestion', () => randomTopMovie());
+ipcMain.handle('content:open', (_event, sourceId, type, language, movie) => openContentSuggestion(sourceId, type, language, movie));
 ipcMain.handle('keyboard:input', (_event, input) => {
   if (!browserView || !browserVisible || browserView.webContents.isDestroyed()) return false;
   const value = String(input || '');

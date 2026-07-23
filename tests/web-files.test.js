@@ -10,6 +10,7 @@ const {
   isSecureWebUrl,
   normalizeWeatherCity
 } = require('../src/lib/system-utils');
+const { MOVIES, randomTopMovie } = require('../src/data/kinopoisk-top250');
 
 test('content discovery recognizes supported web apps and builds safe search URLs', () => {
   assert.equal(contentProviderForUrl('https://www.youtube.com/tv'), 'youtube');
@@ -20,6 +21,18 @@ test('content discovery recognizes supported web apps and builds safe search URL
     'https://www.youtube.com/results?search_query=%D1%84%D0%B8%D0%BB%D1%8C%D0%BC%20%D0%BD%D0%B0%20%D0%B2%D0%B5%D1%87%D0%B5%D1%80'
   );
   assert.equal(buildContentSearchUrl('https://example.com', 'video'), '');
+});
+
+test('offline Kinopoisk collection contains 250 unique movie suggestions', () => {
+  assert.equal(MOVIES.length, 250);
+  assert.equal(new Set(MOVIES).size, 250);
+  assert.deepEqual(randomTopMovie(0), {
+    catalogIndex: 0,
+    title: '1+1',
+    year: 2011,
+    label: '1+1 (2011)'
+  });
+  assert.equal(randomTopMovie(249).catalogIndex, 249);
 });
 
 test('cleanBrowserUserAgent hides Electron product tokens', () => {

@@ -1,4 +1,8 @@
 const grid = document.getElementById('app-grid');
+const favoritesSection = document.getElementById('favorites-section');
+const favoritesRow = document.getElementById('favorites-row');
+const continueSection = document.getElementById('continue-section');
+const continueRow = document.getElementById('continue-row');
 const launcher = document.getElementById('launcher');
 const browserToolbar = document.getElementById('browser-toolbar');
 const browserBackButton = document.getElementById('browser-back');
@@ -46,10 +50,6 @@ const shuffleIcon = document.getElementById('shuffle-icon');
 const shuffleEyebrow = document.getElementById('shuffle-eyebrow');
 const shuffleTitle = document.getElementById('shuffle-title');
 const shuffleDescription = document.getElementById('shuffle-description');
-const contentBackdrop = document.getElementById('content-backdrop');
-const contentPickerClose = document.getElementById('content-picker-close');
-const contentSourceList = document.getElementById('content-source-list');
-const contentOpen = document.getElementById('content-open');
 const backdrop = document.getElementById('dialog-backdrop');
 const dialogTitle = document.getElementById('dialog-title');
 const dialogText = document.getElementById('dialog-text');
@@ -222,16 +222,15 @@ let ambientTimer = null;
 let latestWeatherState = null;
 let weatherLoading = false;
 let weatherSaving = false;
-let selectedContentType = 'film';
-let selectedContentSource = 'any';
-let contentSourcesCache = [];
 let contentOpening = false;
+let currentMovieSuggestion = null;
 let activeAppsCache = [];
 const rememberedFocus = new WeakMap();
 const overlayReturnFocus = new WeakMap();
 
 const translations = {
   ru: {
+    continueWatching: 'Продолжить', favorites: 'Избранное', allApps: 'Все приложения',
     chooseWeatherCity: 'Выберите город', chooseWeatherCityHint: 'Введите любой город вручную или выберите быстрый вариант.', contentFromWeb: 'Из веб‑приложений', whatToWatch: 'Что посмотреть?', contentPickerHint: 'Выберите формат и приложение — откроется готовая тематическая подборка.', movieOption: 'Фильм', movieOptionHint: 'Полнометражное кино или документалка', videoOption: 'Ролик', videoOptionHint: 'Короткое видео по интересной теме', openIn: 'Открыть в приложении', pickContent: 'Подобрать и открыть', appMemory: 'Память приложений', activeApps: 'Активные приложения', activeAppsHint: 'Свернутые веб‑приложения сохраняют страницу и позицию просмотра, пока вы их не закроете.',
     startupGroup: 'Запуск', startupTitle: 'Автозапуск оболочки', startupEnabled: 'Сразу открывать Fedora TV OS после включения', startupDescription: 'Без ввода пароля и экрана выбора пользователей. Выключение вернёт обычный экран GDM после следующей загрузки.',
     flatpakCatalog: 'Каталог приложений', updateAllApps: 'Обновить все', flatpakDescription: 'Установка выполняется только для TV-пользователя и не требует прав администратора.', searchApps: 'Найти',
@@ -242,6 +241,7 @@ const translations = {
     soundGroup: 'Звук', soundTitle: 'Громкость', mute: 'Выключить звук', unmute: 'Включить звук', networkTitle: 'Беспроводная сеть', scan: 'Обновить список', connect: 'Подключиться', cancel: 'Отмена', languageGroup: 'Язык', languageTitle: 'Язык интерфейса', inputGroup: 'Ввод', keyboardTitle: 'Экранная клавиатура', keyboardDescription: 'Открывается автоматически в полях ввода. Её также можно включить кнопкой ⌨ в верхней панели.', openKeyboard: 'Открыть клавиатуру', noNetworks: 'Сети Wi‑Fi не найдены.', wifiOff: 'Wi‑Fi выключен', connected: 'Подключено', secured: 'Защищённая сеть', savedNetwork: 'Сохранённая сеть', open: 'Открытая сеть', signal: 'Сигнал', password: 'Пароль для', apps: 'Приложения', settings: 'Настройки', webApp: 'Веб-приложение', systemApp: 'Системное · Home для возврата', settingsKind: 'Настройки оболочки', addApp: 'Добавить приложение', addKind: 'Сайт или приложение из системы', brandSubtitle: 'Отдельная TV-сессия', logout: 'Сменить пользователя', reboot: 'Перезагрузка', poweroff: 'Выключение', newTile: 'Новая плитка', website: 'Веб-сайт', fromSystem: 'Из системы', systemGroup: 'Система', updateTitle: 'Обновление Fedora TV OS', checkUpdates: 'Проверить обновления', appearanceGroup: 'Оформление', backgroundTitle: 'Фоновое изображение', chooseImage: 'Выбрать изображение', resetBackground: 'Сбросить фон', myApps: 'Мои приложения', done: 'Готово', displayGroup: 'Изображение', displayTitle: 'Дисплеи', displayDescription: 'Выберите экран и настройте его видеорежим. Изменения сохраняются для следующих запусков TV-сессии.', displayOutput: 'Дисплей', displayMode: 'Разрешение и частота', displayScale: 'Масштаб', displayRotation: 'Поворот', displayPositionX: 'Позиция X', displayPositionY: 'Позиция Y', displayEnabled: 'Использовать дисплей', displayEnabledHint: 'Единственный активный экран отключить нельзя.', adaptiveSync: 'Адаптивная частота', adaptiveSyncHint: 'Использовать VRR, если дисплей и видеодрайвер поддерживают его.', rotationNormal: 'Обычный', apply: 'Применить', refreshDevices: 'Обновить устройства', audioOutput: 'Устройство вывода', powerGroup: 'Питание', powerTitle: 'Сон, крышка и кнопки', powerDescription: 'Таймер сна действует в TV-сессии. Крышка и физическая кнопка питания настраиваются для всего устройства после системного подтверждения.', sleepAfter: 'Переходить в сон', never: 'Никогда', powerButton: 'Кнопка питания', askBeforePoweroff: 'Показать подтверждение', poweroffNow: 'Выключить', sleep: 'Сон', doNothing: 'Ничего не делать', lidBattery: 'Закрытие крышки', lidExternalPower: 'Крышка при питании от сети', lidDocked: 'Крышка с внешним дисплеем', applyPower: 'Сохранить настройки питания', bluetoothTitle: 'Bluetooth', bluetoothDescription: 'Подключайте наушники, колонки, пульты и другие устройства.', findDevices: 'Найти устройства', bluetoothOff: 'Bluetooth выключен', noBluetoothDevices: 'Устройства Bluetooth не найдены.', paired: 'Сопряжено', connecting: 'Подключаем…', disconnect: 'Отключить', categorySystem: 'Система', categorySystemHint: 'Обновления и питание', categoryPicture: 'Изображение и звук', categoryPictureHint: 'Экран, масштаб и громкость', categoryConnections: 'Подключения', categoryConnectionsHint: 'Wi‑Fi и Bluetooth', categoryAppearance: 'Оформление', categoryAppearanceHint: 'Фоновое изображение', categoryInput: 'Язык и ввод', categoryInputHint: 'Язык и экранная клавиатура', categoryApps: 'Приложения', categoryAppsHint: 'Добавленные плитки', allSettings: 'Все настройки', filesEyebrow: 'Проводник', filesTitle: 'Файлы', location: 'Расположение', filesHint: 'Выберите папку для перехода или файл, чтобы открыть его в подходящем приложении.'
   },
   en: {
+    continueWatching: 'Continue', favorites: 'Favorites', allApps: 'All apps',
     chooseWeatherCity: 'Choose a city', chooseWeatherCityHint: 'Type any city or use one of the quick choices.', contentFromWeb: 'From web apps', whatToWatch: 'What should I watch?', contentPickerHint: 'Choose a format and an app to open a ready-made themed selection.', movieOption: 'Movie', movieOptionHint: 'A full-length film or documentary', videoOption: 'Video', videoOptionHint: 'A shorter video on an interesting topic', openIn: 'Open in app', pickContent: 'Pick and open', appMemory: 'App memory', activeApps: 'Active apps', activeAppsHint: 'Minimized web apps keep their page and playback position until you close them.',
     startupGroup: 'Startup', startupTitle: 'Shell autostart', startupEnabled: 'Open Fedora TV OS immediately after power-on', startupDescription: 'Skips the password and user picker. Turning this off restores the regular GDM login screen after the next boot.',
     flatpakCatalog: 'App catalog', updateAllApps: 'Update all', flatpakDescription: 'Apps are installed only for the TV user and do not require administrator access.', searchApps: 'Search',
@@ -264,16 +264,14 @@ function applyLanguage(language) {
   const english = currentLanguage === 'en';
   document.getElementById('hero-eyebrow').textContent = english ? 'Home screen' : 'Домашний экран';
   updateGreeting();
-  document.getElementById('hero-description').textContent = english ? 'Web services and Fedora apps — together in one place.' : 'Веб-сервисы и приложения Fedora — в одном месте.';
+  document.getElementById('hero-description').textContent = english ? 'Choose an app or continue where you left off.' : 'Выберите приложение или продолжите с того места, где остановились.';
   document.querySelector('.weather-source').textContent = english ? 'Open‑Meteo · choose city' : 'Open‑Meteo · выбрать город';
   browserHomeButton.setAttribute('aria-label', english ? 'Minimize to Home' : 'Свернуть на главный экран');
   renderShuffleCard();
   activeAppsButton.setAttribute('aria-label', english ? 'Active apps' : 'Активные приложения');
   activeAppsButton.title = english ? 'Active apps' : 'Активные приложения';
-  if (!contentBackdrop.hidden) renderContentSources();
   if (!activeAppsBackdrop.hidden) renderActiveApps();
   if (latestWeatherState) renderWeather(latestWeatherState);
-  document.querySelector('.section-title h2').textContent = t('apps');
   document.getElementById('manage-title').textContent = t('settings');
   const idleLabels = english
     ? { 5: '5 min', 10: '10 min', 20: '20 min', 30: '30 min', 60: '1 hr', 120: '2 hr' }
@@ -536,12 +534,27 @@ function localizedAppTitle(app) {
 
 function renderShuffleCard() {
   const english = currentLanguage === 'en';
-  shuffleEyebrow.textContent = english ? 'Web apps' : 'Веб‑приложения';
-  shuffleIcon.classList.remove('has-image');
-  shuffleIcon.replaceChildren('▶');
-  shuffleTitle.textContent = english ? 'What should I watch?' : 'Что посмотреть?';
-  shuffleDescription.textContent = english ? 'A movie or a shorter video' : 'Фильм или короткий ролик';
-  shuffleCard.setAttribute('aria-label', english ? 'Choose a movie or video from web apps' : 'Выбрать фильм или ролик из веб-приложений');
+  shuffleEyebrow.textContent = english ? 'Kinopoisk · Top 250' : 'Кинопоиск · Top 250';
+  if (!currentMovieSuggestion) {
+    shuffleTitle.textContent = english ? 'Picking a movie…' : 'Подбираем фильм…';
+    shuffleDescription.textContent = english ? 'One of the 250 audience favorites' : 'Один из 250 любимых фильмов зрителей';
+    return;
+  }
+  shuffleTitle.textContent = currentMovieSuggestion.title;
+  shuffleDescription.textContent = [
+    currentMovieSuggestion.year,
+    english ? 'OK — find where to watch' : 'OK — найти, где посмотреть'
+  ].filter(Boolean).join(' · ');
+  shuffleCard.setAttribute('aria-label', english
+    ? `Suggested movie: ${currentMovieSuggestion.label}. Press to find it.`
+    : `Предложенный фильм: ${currentMovieSuggestion.label}. Нажмите, чтобы найти его.`);
+}
+
+async function refreshMovieSuggestion(showMessage = false) {
+  currentMovieSuggestion = await window.tv.getMovieSuggestion();
+  shuffleCard.classList.add('picked');
+  renderShuffleCard();
+  if (showMessage) showToast(currentLanguage === 'en' ? 'Here is another movie' : 'Предлагаю другой фильм');
 }
 
 function openWeatherPicker() {
@@ -592,61 +605,17 @@ async function saveWeatherCity(candidate, source = 'picker') {
   }
 }
 
-function renderContentSources() {
-  contentSourceList.replaceChildren();
-  const candidates = contentSourcesCache.filter((source) => selectedContentType === 'video' || source.supportsFilm);
-  if (!candidates.some((source) => source.id === selectedContentSource)) selectedContentSource = 'any';
-  const sources = [{ id: 'any', title: currentLanguage === 'en' ? 'Any app' : 'Любое приложение', icon: '↝', accent: '#65758b' }, ...candidates];
-  for (const source of sources) {
-    const button = document.createElement('button');
-    button.className = 'content-source focusable';
-    button.type = 'button';
-    button.dataset.contentSource = source.id;
-    button.classList.toggle('selected', source.id === selectedContentSource);
-    button.innerHTML = '<span class="manage-icon"></span><strong></strong>';
-    button.querySelector('.manage-icon').style.setProperty('--accent', source.accent || '#334155');
-    renderAppIcon(button.querySelector('.manage-icon'), source, source.icon || '▶');
-    button.querySelector('strong').textContent = source.id === 'any' ? source.title : localizedAppTitle(source);
-    button.addEventListener('click', () => {
-      selectedContentSource = source.id;
-      renderContentSources();
-      refreshFocusables(contentSourceList.querySelector(`[data-content-source="${source.id}"]`));
-    });
-    contentSourceList.appendChild(button);
-  }
-  if (!candidates.length) {
-    contentOpen.disabled = true;
-    contentSourceList.innerHTML = `<div class="empty-active-apps">${currentLanguage === 'en' ? 'Add YouTube, VK Video, Rutube, Twitch, or Google first.' : 'Добавьте YouTube, VK Видео, Rutube, Twitch или Google.'}</div>`;
-  } else {
-    contentOpen.disabled = false;
-  }
-}
-
-async function openContentPicker() {
-  if (!quickPanel.hidden) closeQuickPanel();
-  overlayReturnFocus.set(contentBackdrop, document.activeElement);
-  contentBackdrop.hidden = false;
-  contentSourcesCache = await window.tv.getContentSources();
-  renderContentSources();
-  refreshFocusables(document.querySelector(`[data-content-type="${selectedContentType}"]`));
-}
-
-function closeContentPicker() {
-  contentBackdrop.hidden = true;
-  refreshFocusables(overlayReturnFocus.get(contentBackdrop) || shuffleCard);
-}
-
-async function handleContentOpen() {
+async function openSuggestedMovie() {
   if (contentOpening) return;
+  if (!currentMovieSuggestion) await refreshMovieSuggestion();
   contentOpening = true;
-  contentOpen.disabled = true;
+  shuffleCard.disabled = true;
   try {
-    const result = await window.tv.openContent(selectedContentSource, selectedContentType, currentLanguage);
+    const result = await window.tv.openContent('any', 'film', currentLanguage, currentMovieSuggestion.label);
     if (!result?.ok) return showToast(result?.message || (currentLanguage === 'en' ? 'Could not find content' : 'Не удалось подобрать контент'));
-    closeContentPicker();
   } finally {
     contentOpening = false;
-    contentOpen.disabled = false;
+    shuffleCard.disabled = false;
   }
 }
 
@@ -656,6 +625,8 @@ function renderActiveApps(apps = activeAppsCache) {
   activeAppsCount.hidden = activeAppsCache.length === 0;
   activeAppsButton.classList.toggle('has-active-apps', activeAppsCache.length > 0);
   activeAppsList.replaceChildren();
+  continueRow.replaceChildren();
+  continueSection.hidden = activeAppsCache.length === 0;
   if (!activeAppsCache.length) {
     activeAppsList.innerHTML = `<div class="empty-active-apps">${currentLanguage === 'en' ? 'No active web apps. Open one from Home first.' : 'Нет активных веб‑приложений. Откройте любое с главного экрана.'}</div>`;
     return;
@@ -683,6 +654,22 @@ function renderActiveApps(apps = activeAppsCache) {
       refreshFocusables(activeAppsList.querySelector('.focusable') || activeAppsClose);
     });
     activeAppsList.appendChild(row);
+
+    const card = document.createElement('button');
+    card.className = 'continue-card focusable';
+    card.type = 'button';
+    card.style.setProperty('--accent', app.accent || '#334155');
+    card.innerHTML = '<span class="continue-icon"></span><span class="continue-copy"><small></small><strong></strong><span></span></span><b></b>';
+    renderAppIcon(card.querySelector('.continue-icon'), app);
+    card.querySelector('small').textContent = currentLanguage === 'en' ? 'Continue' : 'Продолжить';
+    card.querySelector('strong').textContent = localizedAppTitle(app);
+    card.querySelector('.continue-copy span').textContent = app.pageTitle || (currentLanguage === 'en' ? 'Saved page' : 'Сохранённая страница');
+    card.querySelector('b').textContent = currentLanguage === 'en' ? 'Open' : 'Открыть';
+    card.addEventListener('click', async () => {
+      const result = await window.tv.activateApp(app.id);
+      if (!result?.ok) showToast(result?.message || (currentLanguage === 'en' ? 'Could not resume app' : 'Не удалось открыть приложение'));
+    });
+    continueRow.appendChild(card);
   }
 }
 
@@ -747,7 +734,6 @@ function activeOverlay() {
   if (!backdrop.hidden) return backdrop;
   if (!quickPanel.hidden) return quickPanel;
   if (!weatherBackdrop.hidden) return weatherBackdrop;
-  if (!contentBackdrop.hidden) return contentBackdrop;
   if (!activeAppsBackdrop.hidden) return activeAppsBackdrop;
   if (!addBackdrop.hidden) return addBackdrop;
   if (!filesBackdrop.hidden) return filesBackdrop;
@@ -1115,25 +1101,25 @@ const settingsCategoryCopy = {
 };
 
 function showSettingsCategory(category = null, moveFocus = true) {
-  activeSettingsCategory = settingsCategoryCopy[category] ? category : null;
-  settingsCategories.hidden = Boolean(activeSettingsCategory);
-  settingsPageHeader.hidden = !activeSettingsCategory;
+  activeSettingsCategory = settingsCategoryCopy[category] ? category : 'system';
+  settingsCategories.hidden = false;
+  settingsPageHeader.hidden = false;
+  document.querySelectorAll('[data-settings-open]').forEach((button) => {
+    const selected = button.dataset.settingsOpen === activeSettingsCategory;
+    button.classList.toggle('selected', selected);
+    button.setAttribute('aria-current', selected ? 'page' : 'false');
+  });
   document.querySelectorAll('[data-settings-category]').forEach((section) => {
     section.hidden = section.dataset.settingsCategory !== activeSettingsCategory;
   });
-  if (activeSettingsCategory) {
-    const [title, description] = settingsCategoryCopy[activeSettingsCategory][currentLanguage] || settingsCategoryCopy[activeSettingsCategory].ru;
-    document.getElementById('manage-title').textContent = title;
-    settingsPageDescription.textContent = description;
-    if (activeSettingsCategory === 'apps') loadFlatpakCatalog();
-  } else {
-    document.getElementById('manage-title').textContent = t('settings');
-    settingsPageDescription.textContent = '';
-  }
+  const [title, description] = settingsCategoryCopy[activeSettingsCategory][currentLanguage] || settingsCategoryCopy[activeSettingsCategory].ru;
+  document.getElementById('manage-title').textContent = t('settings');
+  settingsPageDescription.textContent = `${title} · ${description}`;
+  if (activeSettingsCategory === 'apps') loadFlatpakCatalog();
   if (moveFocus) {
-    const target = activeSettingsCategory
-      ? settingsBack
-      : settingsCategories.querySelector('.settings-category');
+    const target = document.querySelector(`[data-settings-category="${activeSettingsCategory}"] .focusable`)
+      || document.querySelector(`[data-settings-category="${activeSettingsCategory}"]`)
+      || document.querySelector(`[data-settings-open="${activeSettingsCategory}"]`);
     requestAnimationFrame(() => refreshFocusables(target));
   }
 }
@@ -1143,7 +1129,7 @@ function openManagePanel() {
   overlayReturnFocus.set(manageBackdrop, document.activeElement);
   renderManageList();
   manageBackdrop.hidden = false;
-  showSettingsCategory(null);
+  showSettingsCategory('system');
   loadSystemSettings().then(() => refreshFocusables(document.activeElement));
 }
 
@@ -1849,18 +1835,36 @@ function requestSystemAction(action) {
 
 async function renderApps() {
   appsCache = await window.tv.getApps();
-  grid.innerHTML = '';
-  for (const app of appsCache) {
+  grid.replaceChildren();
+  favoritesRow.replaceChildren();
+  const favoriteApps = appsCache.filter((app) => app.favorite);
+  const regularApps = appsCache.filter((app) => !app.favorite);
+  favoritesSection.hidden = favoriteApps.length === 0;
+
+  const createAppCard = (app, index = 0) => {
     const button = document.createElement('button');
     button.className = 'app-card focusable';
-    button.style.setProperty('--card-index', grid.children.length);
+    button.style.setProperty('--card-index', index);
     button.style.setProperty('--accent', app.accent || '#334155');
     button.dataset.app = JSON.stringify(app);
-    button.innerHTML = `<span class="icon"></span><span class="title"></span>${app.favorite ? '<span class="favorite-mark" aria-label="Избранное">★</span>' : ''}`;
+    button.innerHTML = '<span class="icon"></span><span class="title"></span><span class="card-hint"></span>';
     renderAppIcon(button.querySelector('.icon'), app);
     button.querySelector('.title').textContent = localizedAppTitle(app);
+    button.querySelector('.card-hint').textContent = app.action === 'settings'
+      ? t('settingsKind')
+      : app.action === 'files'
+        ? t('filesTitle')
+        : app.type === 'system'
+          ? t('systemApp')
+          : t('webApp');
     button.addEventListener('click', () => activate(button));
     makeCardInteractive(button);
+    return button;
+  };
+
+  favoriteApps.forEach((app, index) => favoritesRow.appendChild(createAppCard(app, index)));
+  for (const app of regularApps) {
+    const button = createAppCard(app, grid.children.length);
     grid.appendChild(button);
   }
   if (currentProfile !== 'kids') {
@@ -1898,7 +1902,7 @@ async function loadApps() {
   applyAmbientPreference(preferences || {});
   weatherCityInput.value = preferences?.weatherCity || 'Москва';
   onboarding.hidden = preferences?.onboardingComplete !== false;
-  await renderApps();
+  await Promise.all([renderApps(), refreshMovieSuggestion()]);
   renderActiveApps(await window.tv.getActiveApps());
   refreshWeather(false);
   document.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', () => activate(button)));
@@ -1970,15 +1974,11 @@ async function loadApps() {
     weatherPickerInput.value = button.dataset.weatherCity;
     saveWeatherCity(button.dataset.weatherCity, 'picker');
   }));
-  shuffleCard.addEventListener('click', () => openContentPicker().catch((error) => showToast(error?.message || 'Не удалось загрузить источники')));
-  contentPickerClose.addEventListener('click', closeContentPicker);
-  document.querySelectorAll('[data-content-type]').forEach((button) => button.addEventListener('click', () => {
-    selectedContentType = button.dataset.contentType === 'video' ? 'video' : 'film';
-    document.querySelectorAll('[data-content-type]').forEach((choice) => choice.classList.toggle('selected', choice === button));
-    renderContentSources();
-    refreshFocusables(button);
-  }));
-  contentOpen.addEventListener('click', handleContentOpen);
+  shuffleCard.addEventListener('click', () => openSuggestedMovie().catch((error) => showToast(error?.message || 'Не удалось открыть фильм')));
+  shuffleCard.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+    refreshMovieSuggestion(true).catch((error) => showToast(error?.message || 'Не удалось выбрать фильм'));
+  });
   activeAppsButton.addEventListener('click', openActiveAppsPanel);
   activeAppsClose.addEventListener('click', closeActiveAppsPanel);
   weatherCityForm.addEventListener('submit', async (event) => {
@@ -1988,7 +1988,7 @@ async function loadApps() {
   });
   document.querySelectorAll('[data-manage-close]').forEach((button) => button.addEventListener('click', closeManagePanel));
   document.querySelectorAll('[data-settings-open]').forEach((button) => button.addEventListener('click', () => showSettingsCategory(button.dataset.settingsOpen)));
-  settingsBack.addEventListener('click', () => showSettingsCategory(null));
+  settingsBack.addEventListener('click', closeManagePanel);
   filesClose.addEventListener('click', closeFilesPanel);
   filesUp.addEventListener('click', goBackInFiles);
   filesRefresh.addEventListener('click', () => navigateFiles(currentFilesState.path, filesRefresh));
@@ -2345,7 +2345,6 @@ function closeAllOverlays() {
   backdrop.hidden = true;
   quickPanel.hidden = true;
   weatherBackdrop.hidden = true;
-  contentBackdrop.hidden = true;
   activeAppsBackdrop.hidden = true;
   addBackdrop.hidden = true;
   filesBackdrop.hidden = true;
@@ -2369,11 +2368,10 @@ async function handleInputAction(action) {
     if (!backdrop.hidden) return closeConfirm();
     if (!quickPanel.hidden) return closeQuickPanel();
     if (!weatherBackdrop.hidden) return closeWeatherPicker();
-    if (!contentBackdrop.hidden) return closeContentPicker();
     if (!activeAppsBackdrop.hidden) return closeActiveAppsPanel();
     if (!addBackdrop.hidden) return closeAddPanel();
     if (!filesBackdrop.hidden) return goBackInFiles();
-    if (!manageBackdrop.hidden) return activeSettingsCategory ? showSettingsCategory(null) : closeManagePanel();
+    if (!manageBackdrop.hidden) return closeManagePanel();
     if (browserOpen) return window.tv.focusBrowser();
     return;
   }
@@ -2383,13 +2381,23 @@ async function handleInputAction(action) {
   }
   if (action === 'menu') {
     if (browserOpen) return window.tv.focusBrowser();
+    if (document.activeElement === shuffleCard) return refreshMovieSuggestion(true);
+    if (document.activeElement?.dataset?.app) {
+      openManagePanel();
+      return showSettingsCategory('apps');
+    }
     if (!activeOverlay()) return openManagePanel();
     return;
   }
   if (action === 'power') return requestSystemAction('poweroff');
   if (['volume-up', 'volume-down', 'mute'].includes(action)) {
     const result = await window.tv.systemAction(action);
-    if (result?.audio) renderAudio(result.audio);
+    if (result?.audio) {
+      renderAudio(result.audio);
+      showToast(result.audio.muted
+        ? (currentLanguage === 'en' ? 'Muted' : 'Звук выключен')
+        : `${currentLanguage === 'en' ? 'Volume' : 'Громкость'} · ${result.audio.volume}%`);
+    }
     return result;
   }
   if (['play-pause', 'next', 'previous', 'stop'].includes(action)) return window.tv.mediaAction(action);
