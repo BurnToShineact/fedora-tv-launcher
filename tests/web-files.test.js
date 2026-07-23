@@ -11,7 +11,7 @@ const {
   normalizeWeatherCity,
   removableVolumesFromLsblk
 } = require('../src/lib/system-utils');
-const { MOVIES, randomTopMovie } = require('../src/data/kinopoisk-top250');
+const { KINOPOISK_IDS, MOVIES, randomTopMovie } = require('../src/data/kinopoisk-top250');
 
 test('content discovery recognizes supported web apps and builds safe search URLs', () => {
   assert.equal(contentProviderForUrl('https://www.youtube.com/tv'), 'youtube');
@@ -27,13 +27,26 @@ test('content discovery recognizes supported web apps and builds safe search URL
 test('offline Kinopoisk collection contains 250 unique movie suggestions', () => {
   assert.equal(MOVIES.length, 250);
   assert.equal(new Set(MOVIES).size, 250);
+  assert.equal(KINOPOISK_IDS.length, MOVIES.length);
+  assert.equal(new Set(KINOPOISK_IDS).size, MOVIES.length);
+  assert.equal(KINOPOISK_IDS.every((id) => Number.isSafeInteger(id) && id > 0), true);
   assert.deepEqual(randomTopMovie(0), {
     catalogIndex: 0,
     title: '1+1',
     year: 2011,
-    label: '1+1 (2011)'
+    label: '1+1 (2011)',
+    kinopoiskId: 535341,
+    kinopoiskUrl: 'https://www.kinopoisk.ru/film/535341/',
+    posterUrl: 'https://st.kp.yandex.net/images/film_iphone/iphone360_535341.jpg'
   });
-  assert.equal(randomTopMovie(249).catalogIndex, 249);
+  for (let index = 0; index < MOVIES.length; index += 1) {
+    const movie = randomTopMovie(index);
+    assert.equal(movie.kinopoiskId, KINOPOISK_IDS[index]);
+    assert.equal(movie.kinopoiskUrl, `https://www.kinopoisk.ru/film/${movie.kinopoiskId}/`);
+    assert.equal(movie.posterUrl, `https://st.kp.yandex.net/images/film_iphone/iphone360_${movie.kinopoiskId}.jpg`);
+  }
+  assert.equal(randomTopMovie(MOVIES.indexOf('Мотылек (1973)')).kinopoiskId, 4525);
+  assert.equal(randomTopMovie(MOVIES.indexOf('Одержимость (2004)')).kinopoiskId, 23737);
 });
 
 test('cleanBrowserUserAgent hides Electron product tokens', () => {

@@ -1720,7 +1720,7 @@ body::before { opacity: .16; animation: none; }
   font-size: 18px;
   line-height: 1.45;
 }
-.home-dashboard { grid-template-columns: minmax(330px, 1.08fr) minmax(310px, .92fr); }
+.home-dashboard { grid-template-columns: minmax(300px, .9fr) minmax(380px, 1.1fr); }
 .dashboard-card { min-height: 132px; padding: 19px; }
 .dashboard-eyebrow { font-size: 12px; }
 .weather-copy > span:last-child,
@@ -1733,8 +1733,8 @@ body::before { opacity: .16; animation: none; }
 }
 .movie-poster {
   position: relative;
-  width: 72px;
-  height: 98px;
+  width: 88px;
+  height: 120px;
   overflow: hidden;
   border: 1px solid rgba(238, 228, 255, .32);
   border-radius: 15px;
@@ -1780,7 +1780,10 @@ body::before { opacity: .16; animation: none; }
   stroke-linejoin: round;
 }
 .movie-card {
-  grid-template-columns: 72px minmax(0, 1fr);
+  min-height: 158px;
+  padding: 22px;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 17px;
   background:
     radial-gradient(circle at 92% 10%, rgba(205, 169, 255, .17), transparent 42%),
     linear-gradient(145deg, rgba(92, 61, 146, .7), rgba(41, 29, 68, .68));
@@ -2027,7 +2030,7 @@ body::before { opacity: .16; animation: none; }
 
 @media (max-width: 1100px) {
   .home-overview { grid-template-columns: 1fr; }
-  .home-dashboard { grid-template-columns: minmax(330px, 1.1fr) minmax(280px, .9fr); }
+  .home-dashboard { grid-template-columns: minmax(300px, .9fr) minmax(340px, 1.1fr); }
   .settings-panel { grid-template-columns: 230px minmax(0, 1fr); column-gap: 24px; }
   .settings-category small { display: none; }
 }

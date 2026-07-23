@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('tv', {
   getContentSources: () => ipcRenderer.invoke('content:sources'),
   getMovieSuggestion: () => ipcRenderer.invoke('content:movie-suggestion'),
   openContent: (sourceId, type, language, movie = '') => ipcRenderer.invoke('content:open', sourceId, type, language, movie),
+  openKinopoiskMovie: (kinopoiskId) => ipcRenderer.invoke('content:open-kinopoisk', kinopoiskId),
   browserBack: () => ipcRenderer.invoke('browser:back'),
   goHome: () => ipcRenderer.invoke('browser:home'),
   refresh: () => ipcRenderer.invoke('browser:refresh'),

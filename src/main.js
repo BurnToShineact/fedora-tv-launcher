@@ -64,6 +64,14 @@ const KEYBOARD_HEIGHT = 292;
 const KEYBOARD_VIEWPORT_RATIO = 0.48;
 const WEB_PARTITION = 'persist:fedora-tv';
 const SYSTEM_COMMAND_ENV = { ...process.env, LC_ALL: 'C', LANG: 'C' };
+const KINOPOISK_APP = Object.freeze({
+  id: 'kinopoisk',
+  title: 'Кинопоиск',
+  titleEn: 'Kinopoisk',
+  url: 'https://www.kinopoisk.ru',
+  icon: 'КП',
+  accent: '#ff5c00'
+});
 const DEFAULT_WEATHER_CITY = 'Москва';
 const WEATHER_CACHE_MAX_AGE = 15 * 60 * 1000;
 const CONTENT_IDEAS = Object.freeze({
@@ -1228,7 +1236,9 @@ function closeWebApp(appId) {
 async function activateWebApp(appId) {
   const entry = browserSessions.get(String(appId || ''));
   if (!entry) return { ok: false, message: 'Приложение уже закрыто.' };
-  const storedApp = readApps().find((item) => item.id === appId);
+  const storedApp = appId === KINOPOISK_APP.id
+    ? KINOPOISK_APP
+    : readApps().find((item) => item.id === appId);
   if (!storedApp || !appAllowedForProfile(storedApp)) return { ok: false, message: 'Приложение недоступно.' };
   await openWebsite(storedApp);
   return { ok: true };
@@ -1267,6 +1277,16 @@ async function openContentSuggestion(sourceId, requestedType, language, requeste
   if (!targetUrl) return { ok: false, message: locale === 'en' ? 'This app does not support content discovery.' : 'Это приложение пока не поддерживает подбор контента.' };
   await openWebsite(appItem, targetUrl);
   return { ok: true, title, source: locale === 'en' ? (appItem.titleEn || appItem.title) : appItem.title, type };
+}
+
+async function openKinopoiskMovie(requestedId) {
+  const kinopoiskId = Number(requestedId);
+  if (!Number.isSafeInteger(kinopoiskId) || kinopoiskId <= 0) {
+    return { ok: false, message: 'Некорректный идентификатор фильма.' };
+  }
+  const url = `https://www.kinopoisk.ru/film/${kinopoiskId}/`;
+  await openWebsite(KINOPOISK_APP, url);
+  return { ok: true, url };
 }
 
 async function controlWebMedia(action) {
@@ -2035,6 +2055,7 @@ ipcMain.handle('active-apps:close', (_event, appId) => closeWebApp(appId));
 ipcMain.handle('content:sources', () => contentSources());
 ipcMain.handle('content:movie-suggestion', () => randomTopMovie());
 ipcMain.handle('content:open', (_event, sourceId, type, language, movie) => openContentSuggestion(sourceId, type, language, movie));
+ipcMain.handle('content:open-kinopoisk', (_event, kinopoiskId) => openKinopoiskMovie(kinopoiskId));
 ipcMain.handle('keyboard:input', (_event, input) => {
   if (!browserView || !browserVisible || browserView.webContents.isDestroyed()) return false;
   const value = String(input || '');

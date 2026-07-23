@@ -47,6 +47,7 @@ const weatherPickerSave = document.getElementById('weather-picker-save');
 const weatherPickerStatus = document.getElementById('weather-picker-status');
 const shuffleCard = document.getElementById('shuffle-card');
 const shuffleIcon = document.getElementById('shuffle-icon');
+const shufflePoster = document.getElementById('shuffle-poster');
 const shuffleEyebrow = document.getElementById('shuffle-eyebrow');
 const shuffleTitle = document.getElementById('shuffle-title');
 const shuffleDescription = document.getElementById('shuffle-description');
@@ -539,18 +540,20 @@ function renderShuffleCard() {
   const english = currentLanguage === 'en';
   shuffleEyebrow.textContent = english ? 'Kinopoisk · Top 250' : 'Кинопоиск · Top 250';
   if (!currentMovieSuggestion) {
+    shufflePoster.src = '../../assets/posters/movie-night.webp';
     shuffleTitle.textContent = english ? 'Picking a movie…' : 'Подбираем фильм…';
     shuffleDescription.textContent = english ? 'One of the 250 audience favorites' : 'Один из 250 любимых фильмов зрителей';
     return;
   }
+  shufflePoster.src = currentMovieSuggestion.posterUrl;
   shuffleTitle.textContent = currentMovieSuggestion.title;
   shuffleDescription.textContent = [
     currentMovieSuggestion.year,
-    english ? 'OK — find where to watch' : 'OK — найти, где посмотреть'
+    english ? 'OK — open on Kinopoisk' : 'OK — открыть на Кинопоиске'
   ].filter(Boolean).join(' · ');
   shuffleCard.setAttribute('aria-label', english
-    ? `Suggested movie: ${currentMovieSuggestion.label}. Press to find it.`
-    : `Предложенный фильм: ${currentMovieSuggestion.label}. Нажмите, чтобы найти его.`);
+    ? `Suggested movie: ${currentMovieSuggestion.label}. Press to open it on Kinopoisk.`
+    : `Предложенный фильм: ${currentMovieSuggestion.label}. Нажмите, чтобы открыть его на Кинопоиске.`);
 }
 
 async function refreshMovieSuggestion(showMessage = false) {
@@ -614,8 +617,8 @@ async function openSuggestedMovie() {
   contentOpening = true;
   shuffleCard.disabled = true;
   try {
-    const result = await window.tv.openContent('any', 'film', currentLanguage, currentMovieSuggestion.label);
-    if (!result?.ok) return showToast(result?.message || (currentLanguage === 'en' ? 'Could not find content' : 'Не удалось подобрать контент'));
+    const result = await window.tv.openKinopoiskMovie(currentMovieSuggestion.kinopoiskId);
+    if (!result?.ok) return showToast(result?.message || (currentLanguage === 'en' ? 'Could not open Kinopoisk' : 'Не удалось открыть Кинопоиск'));
   } finally {
     contentOpening = false;
     shuffleCard.disabled = false;
@@ -2023,6 +2026,11 @@ async function loadApps() {
     refreshFocusables(screensaverTimeout);
   });
   weatherCard.addEventListener('click', openWeatherPicker);
+  shufflePoster.addEventListener('error', () => {
+    if (!shufflePoster.src.endsWith('/assets/posters/movie-night.webp')) {
+      shufflePoster.src = '../../assets/posters/movie-night.webp';
+    }
+  });
   weatherPickerClose.addEventListener('click', closeWeatherPicker);
   weatherPickerForm.addEventListener('submit', (event) => {
     event.preventDefault();
