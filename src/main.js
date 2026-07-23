@@ -44,6 +44,7 @@ let mediaComponentsReady = Promise.resolve(false);
 let protectedMediaVersion = null;
 let systemAppMode = false;
 let confirmationVisible = false;
+let browserQuickPanelVisible = false;
 let idleActionInProgress = false;
 let lastIdleActionAt = 0;
 let pendingLauncherAction = process.argv.includes('--poweroff') ? 'poweroff' : null;
@@ -1017,7 +1018,7 @@ function sendBrowserState(extra = {}) {
 }
 
 function resizeBrowserView() {
-  if (!mainWindow || !browserView || !browserVisible || confirmationVisible) return;
+  if (!mainWindow || !browserView || !browserVisible || confirmationVisible || browserQuickPanelVisible) return;
   const [width, height] = mainWindow.getContentSize();
   const keyboardHeight = keyboardVisible ? Math.min(KEYBOARD_HEIGHT, Math.floor(height * KEYBOARD_VIEWPORT_RATIO)) : 0;
   const toolbarHeight = browserFullscreen ? 0 : BROWSER_TOOLBAR_HEIGHT;
@@ -1118,6 +1119,7 @@ function ensureBrowserView(selectedApp) {
       browserView = null;
       activeBrowserAppId = null;
       browserVisible = false;
+      browserQuickPanelVisible = false;
       keyboardVisible = false;
       browserFullscreen = false;
       sendBrowserState({ visible: false });
@@ -1137,6 +1139,7 @@ function showLauncher() {
     })()`).catch(() => {});
   }
   browserVisible = false;
+  browserQuickPanelVisible = false;
   browserMediaPlaying = false;
   keyboardVisible = false;
   browserFullscreen = false;
@@ -1171,12 +1174,41 @@ function setConfirmationVisible(visible) {
 
   mainWindow.setAlwaysOnTop(false);
   mainWindow.setVisibleOnAllWorkspaces(false);
-  if (browserVisible && browserView && !mainWindow.contentView.children.includes(browserView)) {
+  if (browserVisible && !browserQuickPanelVisible && browserView && !mainWindow.contentView.children.includes(browserView)) {
     mainWindow.contentView.addChildView(browserView);
     resizeBrowserView();
     setTimeout(() => browserView?.webContents.focus(), 0);
   }
   return false;
+}
+
+async function setBrowserQuickPanelVisible(visible) {
+  browserQuickPanelVisible = Boolean(visible);
+  if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, snapshot: '' };
+
+  if (browserQuickPanelVisible) {
+    let snapshot = '';
+    if (browserVisible && browserView && !browserView.webContents.isDestroyed()) {
+      try {
+        snapshot = (await browserView.webContents.capturePage()).toDataURL();
+      } catch {
+        snapshot = '';
+      }
+      if (mainWindow.contentView.children.includes(browserView)) {
+        mainWindow.contentView.removeChildView(browserView);
+      }
+    }
+    mainWindow.webContents.focus();
+    return { ok: true, snapshot };
+  }
+
+  if (browserVisible && !confirmationVisible && browserView && !browserView.webContents.isDestroyed()
+    && !mainWindow.contentView.children.includes(browserView)) {
+    mainWindow.contentView.addChildView(browserView);
+    resizeBrowserView();
+    setTimeout(() => browserView?.webContents.focus(), 0);
+  }
+  return { ok: true, snapshot: '' };
 }
 
 function requestLauncherAction(action) {
@@ -1199,6 +1231,7 @@ async function openWebsite(selectedApp, targetUrl = null) {
   entry.lastActiveAt = Date.now();
   if (!mainWindow.contentView.children.includes(view)) mainWindow.contentView.addChildView(view);
   browserVisible = true;
+  browserQuickPanelVisible = false;
   keyboardVisible = false;
   browserFullscreen = false;
   resizeBrowserView();
@@ -1223,6 +1256,7 @@ function closeWebApp(appId) {
     browserView = null;
     activeBrowserAppId = null;
     browserVisible = false;
+    browserQuickPanelVisible = false;
     keyboardVisible = false;
     browserFullscreen = false;
     sendBrowserState({ visible: false });
@@ -2049,6 +2083,7 @@ ipcMain.handle('browser:keyboard', (_event, visible) => {
   resizeBrowserView();
   return keyboardVisible;
 });
+ipcMain.handle('browser:quick-panel', (_event, visible) => setBrowserQuickPanelVisible(visible));
 ipcMain.handle('active-apps:get', () => activeWebApps());
 ipcMain.handle('active-apps:activate', (_event, appId) => activateWebApp(appId));
 ipcMain.handle('active-apps:close', (_event, appId) => closeWebApp(appId));

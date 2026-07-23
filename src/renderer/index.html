@@ -26,10 +26,12 @@
       <button class="status-pill browser-status-pill focusable" id="browser-network" type="button" aria-label="Выбрать сеть Wi‑Fi" aria-expanded="false" title="Wi‑Fi"><i class="wifi-signal level-0" aria-hidden="true">◌</i><b>Wi‑Fi</b></button>
       <button class="status-pill browser-status-pill focusable" id="browser-bluetooth" type="button" aria-label="Устройства Bluetooth" aria-expanded="false" title="Bluetooth"><i class="bluetooth-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M7 7l10 10-5 4V3l5 4L7 17"/></svg></i><b>Bluetooth</b></button>
       <button class="status-pill browser-status-pill focusable" id="browser-volume" type="button" aria-label="Настроить громкость" aria-expanded="false" title="Громкость"><i class="volume-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 10v4h4l5 4V6l-5 4H4Z"/><path d="M16 9.5a4 4 0 0 1 0 5"/><path d="M19 7a7 7 0 0 1 0 10"/></svg></i><b>—</b></button>
+      <button class="status-pill browser-status-pill focusable" id="browser-settings" type="button" aria-label="Открыть настройки" title="Настройки"><i class="browser-settings-symbol" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.86 2.86-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.55v-.1A1.7 1.7 0 0 0 8.5 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.86-2.86.06-.06A1.7 1.7 0 0 0 4.1 15a1.7 1.7 0 0 0-1.5-1H2.5V10h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.34-1.88L3.7 7.06 6.56 4.2l.06.06A1.7 1.7 0 0 0 8.5 4.6a1.7 1.7 0 0 0 1-1.5V3h4.05v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.86 2.86-.06.06A1.7 1.7 0 0 0 18.95 9a1.7 1.7 0 0 0 1.5 1h.1v4h-.1a1.7 1.7 0 0 0-1.05 1Z"/></svg></i><b>Настройки</b></button>
     </div>
     <div class="browser-loading" id="browser-loading" hidden><span></span></div>
     <button class="browser-resume focusable" id="browser-focus" type="button"><span>К сайту</span> ↘</button>
   </header>
+  <div class="browser-app-snapshot" id="browser-app-snapshot" aria-hidden="true" hidden></div>
   <aside class="update-notice" id="update-notice" data-nav-zone="notice" data-nav-order="3" role="status" hidden>
     <div class="update-notice-icon">↑</div>
     <div class="update-notice-copy">
@@ -64,6 +66,7 @@
       </div>
       <div class="status">
         <div class="system-pills" aria-label="Состояние системы">
+          <button class="status-pill weather-status-pill focusable" id="weather-card" type="button" aria-label="Открыть погоду"><i class="weather-status-icon" id="weather-icon" aria-hidden="true">◌</i><b id="weather-temperature">—°</b></button>
           <button class="status-pill focusable" id="topbar-network" type="button" aria-label="Выбрать сеть Wi‑Fi" aria-expanded="false"><i class="wifi-signal level-0" aria-hidden="true">◌</i><b>Wi‑Fi</b></button>
           <button class="status-pill focusable" id="topbar-bluetooth" type="button" aria-label="Устройства Bluetooth" aria-expanded="false"><i class="bluetooth-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M7 7l10 10-5 4V3l5 4L7 17"/></svg></i><b>Bluetooth</b></button>
           <button class="status-pill focusable" id="topbar-volume" type="button" aria-label="Настроить громкость" aria-expanded="false"><i class="volume-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 10v4h4l5 4V6l-5 4H4Z"/><path d="M16 9.5a4 4 0 0 1 0 5"/><path d="M19 7a7 7 0 0 1 0 10"/></svg></i><b>—</b></button>
@@ -89,19 +92,15 @@
         <p id="hero-description">Выберите приложение или продолжите с того места, где остановились.</p>
       </div>
       <div class="home-dashboard" data-nav-zone="dashboard" data-nav-order="1" aria-label="Сегодня">
-        <button class="dashboard-card weather-card focusable" id="weather-card" type="button" aria-label="Обновить погоду">
-          <span class="weather-icon" id="weather-icon" aria-hidden="true">◌</span>
-          <span class="weather-copy">
-            <span class="dashboard-eyebrow" id="weather-location">Погода</span>
-            <strong id="weather-temperature">—°</strong>
-            <span id="weather-condition">Загружаем прогноз…</span>
+        <button class="dashboard-card movie-card fact-card focusable" id="cinema-fact-card" type="button" aria-label="Показать другой факт о кино">
+          <span class="fact-visual" aria-hidden="true">
+            <svg viewBox="0 0 64 88"><path d="M8 7h48v74H8z"/><path d="M15 7v74M49 7v74M8 19h48M8 69h48"/><path d="M24 36l18 10-18 10z"/></svg>
           </span>
-          <span class="weather-meta">
-            <span id="weather-range">—</span>
-            <span id="weather-daylight">—</span>
+          <span class="fact-copy">
+            <span class="dashboard-eyebrow" id="cinema-fact-eyebrow">Факт из мира кино</span>
+            <strong id="cinema-fact-text">Готовим интересный факт…</strong>
+            <span id="cinema-fact-hint">Новый факт каждые 5 минут · OK — следующий</span>
           </span>
-          <span class="daylight-track" aria-hidden="true"><i id="weather-daylight-progress"></i></span>
-          <span class="weather-source">Open‑Meteo · выбрать город</span>
         </button>
         <button class="dashboard-card shuffle-card movie-card focusable" id="shuffle-card" type="button" aria-label="Открыть предложенный фильм">
           <span class="shuffle-icon movie-poster" id="shuffle-icon" aria-hidden="true">

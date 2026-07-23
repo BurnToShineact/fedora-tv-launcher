@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld('tv', {
   toggleBrowserFullscreen: () => ipcRenderer.invoke('browser:fullscreen'),
   mediaAction: (action) => ipcRenderer.invoke('media:action', action),
   setBrowserKeyboard: (visible) => ipcRenderer.invoke('browser:keyboard', visible),
+  setBrowserQuickPanel: (visible) => ipcRenderer.invoke('browser:quick-panel', visible),
   keyboardInput: (input) => ipcRenderer.invoke('keyboard:input', input),
   getPreferences: () => ipcRenderer.invoke('settings:get-preferences'),
   getWeather: (language, force = false) => ipcRenderer.invoke('weather:get', language, force),

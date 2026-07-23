@@ -14,6 +14,8 @@ const browserKeyboardButton = document.getElementById('browser-keyboard');
 const browserNetwork = document.getElementById('browser-network');
 const browserBluetooth = document.getElementById('browser-bluetooth');
 const browserVolume = document.getElementById('browser-volume');
+const browserSettingsButton = document.getElementById('browser-settings');
+const browserAppSnapshot = document.getElementById('browser-app-snapshot');
 const browserFocusButton = document.getElementById('browser-focus');
 const browserTitle = document.getElementById('browser-title');
 const browserUrl = document.getElementById('browser-url');
@@ -36,12 +38,7 @@ const clock = document.getElementById('clock');
 const dateLabel = document.getElementById('date');
 const weatherCard = document.getElementById('weather-card');
 const weatherIcon = document.getElementById('weather-icon');
-const weatherLocation = document.getElementById('weather-location');
 const weatherTemperature = document.getElementById('weather-temperature');
-const weatherCondition = document.getElementById('weather-condition');
-const weatherRange = document.getElementById('weather-range');
-const weatherDaylight = document.getElementById('weather-daylight');
-const weatherDaylightProgress = document.getElementById('weather-daylight-progress');
 const weatherBackdrop = document.getElementById('weather-backdrop');
 const weatherPickerClose = document.getElementById('weather-picker-close');
 const weatherPickerForm = document.getElementById('weather-picker-form');
@@ -54,6 +51,10 @@ const shufflePoster = document.getElementById('shuffle-poster');
 const shuffleEyebrow = document.getElementById('shuffle-eyebrow');
 const shuffleTitle = document.getElementById('shuffle-title');
 const shuffleDescription = document.getElementById('shuffle-description');
+const cinemaFactCard = document.getElementById('cinema-fact-card');
+const cinemaFactEyebrow = document.getElementById('cinema-fact-eyebrow');
+const cinemaFactText = document.getElementById('cinema-fact-text');
+const cinemaFactHint = document.getElementById('cinema-fact-hint');
 const backdrop = document.getElementById('dialog-backdrop');
 const dialogTitle = document.getElementById('dialog-title');
 const dialogText = document.getElementById('dialog-text');
@@ -232,11 +233,67 @@ let weatherSaving = false;
 let contentOpening = false;
 let currentMovieSuggestion = null;
 let movieSuggestionLoading = false;
+let cinemaFactIndex = -1;
 let quickPanelOverBrowser = false;
 let activeAppsCache = [];
 const rememberedFocus = new WeakMap();
 const overlayReturnFocus = new WeakMap();
 const MOVIE_ROTATION_INTERVAL_MS = 5 * 60 * 1000;
+const CINEMA_FACT_ROTATION_INTERVAL_MS = 5 * 60 * 1000;
+const CINEMA_FACTS = [
+  {
+    ru: 'Братья Люмьер устроили знаменитый платный публичный киносеанс в Париже 28 декабря 1895 года.',
+    en: 'The Lumière brothers held their famous paid public film screening in Paris on December 28, 1895.'
+  },
+  {
+    ru: 'С распространением звукового кино скорость 24 кадра в секунду стала индустриальным стандартом.',
+    en: 'As sound cinema spread, 24 frames per second became the industry standard.'
+  },
+  {
+    ru: '«История игрушек» 1995 года стала первым полнометражным фильмом, полностью созданным компьютерной анимацией.',
+    en: 'Toy Story (1995) was the first feature film made entirely with computer animation.'
+  },
+  {
+    ru: 'В сцене душа из «Психо» кровь изображал шоколадный сироп — в чёрно-белом кадре он давал нужный контраст.',
+    en: 'The shower scene in Psycho used chocolate syrup for blood because it gave the right contrast in black and white.'
+  },
+  {
+    ru: 'Звук светового меча в «Звёздных войнах» родился из гула мотора кинопроектора и электрических помех.',
+    en: 'The Star Wars lightsaber sound grew from a film-projector motor hum combined with electrical interference.'
+  },
+  {
+    ru: 'Механическую акулу на съёмках «Челюстей» команда прозвала Брюсом.',
+    en: 'The crew of Jaws nicknamed its mechanical shark Bruce.'
+  },
+  {
+    ru: 'Бой в коридоре из «Начала» снимали в полноразмерной вращающейся декорации.',
+    en: 'The hallway fight in Inception was filmed inside a full-size rotating set.'
+  },
+  {
+    ru: 'Эффект bullet time в «Матрице» создавали с помощью массива фотокамер, окружавших актёра.',
+    en: 'The Matrix created bullet time with an array of still cameras surrounding the actor.'
+  },
+  {
+    ru: 'Разницу в росте героев «Властелина колец» часто создавали перспективой и декорациями разного масштаба.',
+    en: 'The Lord of the Rings often created character height differences with forced perspective and differently scaled sets.'
+  },
+  {
+    ru: '«Парк юрского периода» объединил полноразмерную аниматронику с компьютерной графикой.',
+    en: 'Jurassic Park combined full-size animatronics with computer-generated imagery.'
+  },
+  {
+    ru: 'Знаменитый кот в начале «Крёстного отца» появился в кадре по решению Фрэнсиса Форда Копполы уже на площадке.',
+    en: 'The famous cat in The Godfather opening was added by Francis Ford Coppola on set.'
+  },
+  {
+    ru: 'Для интерьеров корабля в «Космической одиссее 2001 года» построили вращающуюся декорацию-центрифугу.',
+    en: '2001: A Space Odyssey used a rotating centrifuge set for the spacecraft interiors.'
+  },
+  {
+    ru: 'Большая часть автомобильных трюков в «Безумном Максе: Дорога ярости» выполнялась физически на съёмочной площадке.',
+    en: 'Most vehicle stunts in Mad Max: Fury Road were performed practically on set.'
+  }
+];
 
 const translations = {
   ru: {
@@ -275,9 +332,11 @@ function applyLanguage(language) {
   document.getElementById('hero-eyebrow').textContent = english ? 'Home screen' : 'Домашний экран';
   updateGreeting();
   document.getElementById('hero-description').textContent = english ? 'Choose an app or continue where you left off.' : 'Выберите приложение или продолжите с того места, где остановились.';
-  document.querySelector('.weather-source').textContent = english ? 'Open‑Meteo · choose city' : 'Open‑Meteo · выбрать город';
   browserHomeButton.setAttribute('aria-label', english ? 'Minimize to Home' : 'Свернуть на главный экран');
+  browserSettingsButton.setAttribute('aria-label', english ? 'Open settings' : 'Открыть настройки');
+  browserSettingsButton.title = t('settings');
   renderShuffleCard();
+  renderCinemaFact();
   activeAppsButton.setAttribute('aria-label', english ? 'Active apps' : 'Активные приложения');
   activeAppsButton.title = english ? 'Active apps' : 'Активные приложения';
   if (!activeAppsBackdrop.hidden) renderActiveApps();
@@ -307,6 +366,10 @@ function renderBrowserState(state = {}) {
   browserToolbar.hidden = !visible;
   launcher.hidden = visible;
   document.body.classList.toggle('browser-open', visible);
+  if (!visible) {
+    browserAppSnapshot.hidden = true;
+    browserAppSnapshot.style.removeProperty('background-image');
+  }
   browserTitle.textContent = state.title || 'Веб-приложение';
   browserUrl.textContent = state.url || '';
   browserError.textContent = state.error || '';
@@ -492,28 +555,17 @@ function renderWeather(state = {}) {
   weatherCard.classList.toggle('is-night', state.ok && !state.current?.isDay);
   if (!state.ok) {
     weatherIcon.textContent = '!';
-    weatherLocation.textContent = state.city || (english ? 'Weather' : 'Погода');
     weatherTemperature.textContent = '—°';
-    weatherCondition.textContent = state.message || (english ? 'Forecast unavailable' : 'Прогноз недоступен');
-    weatherRange.textContent = english ? 'Choose a city' : 'Выберите город';
-    weatherDaylight.textContent = '—';
-    weatherDaylightProgress.style.width = '0%';
     weatherCard.setAttribute('aria-label', `${state.message || (english ? 'Forecast unavailable' : 'Прогноз недоступен')}. ${english ? 'Press to choose a city.' : 'Нажмите, чтобы выбрать город.'}`);
+    weatherCard.title = state.message || (english ? 'Weather unavailable' : 'Погода недоступна');
     return;
   }
 
   const presentation = weatherPresentation(state.current?.weatherCode, state.current?.isDay);
-  const today = state.days?.[0] || {};
-  const daylight = daylightState(state.days, state.utcOffsetSeconds);
   weatherIcon.textContent = presentation.icon;
-  const region = String(state.region || '');
-  weatherLocation.textContent = [state.city, region && region.toLocaleLowerCase() !== String(state.city || '').toLocaleLowerCase() ? region : ''].filter(Boolean).join(' · ');
   weatherTemperature.textContent = formatTemperature(state.current?.temperature);
-  weatherCondition.textContent = `${presentation[english ? 'en' : 'ru']} · ${english ? 'feels like' : 'ощущается как'} ${formatTemperature(state.current?.apparentTemperature)}`;
-  weatherRange.textContent = `${english ? 'Low' : 'Мин'} ${formatTemperature(today.min)} · ${english ? 'High' : 'Макс'} ${formatTemperature(today.max)}`;
-  weatherDaylight.textContent = daylight.label;
-  weatherDaylightProgress.style.width = `${daylight.progress}%`;
   weatherCard.setAttribute('aria-label', `${state.city}: ${weatherTemperature.textContent}, ${presentation[english ? 'en' : 'ru']}. ${english ? 'Press to choose another city.' : 'Нажмите, чтобы выбрать другой город.'}`);
+  weatherCard.title = `${state.city} · ${presentation[english ? 'en' : 'ru']}`;
   weatherSettingsStatus.textContent = state.stale
     ? (state.message || (english ? 'Showing the last saved forecast.' : 'Показан последний сохранённый прогноз.'))
     : `${english ? 'Forecast ready for' : 'Прогноз настроен для'} ${state.city}.`;
@@ -540,6 +592,25 @@ async function refreshWeather(force = false) {
 function localizedAppTitle(app) {
   const builtInEnglishTitles = { vkvideo: 'VK Video', browser: 'Browser', files: 'Files', settings: 'Settings' };
   return currentLanguage === 'en' ? (app?.titleEn || builtInEnglishTitles[app?.id] || app?.title) : app?.title;
+}
+
+function renderCinemaFact() {
+  if (cinemaFactIndex < 0) cinemaFactIndex = Math.floor(Math.random() * CINEMA_FACTS.length);
+  const fact = CINEMA_FACTS[cinemaFactIndex];
+  const english = currentLanguage === 'en';
+  cinemaFactEyebrow.textContent = english ? 'A fact from the movies' : 'Факт из мира кино';
+  cinemaFactText.textContent = fact[english ? 'en' : 'ru'];
+  cinemaFactHint.textContent = english ? 'New fact every 5 minutes · OK — next' : 'Новый факт каждые 5 минут · OK — следующий';
+  cinemaFactCard.setAttribute('aria-label', `${fact[english ? 'en' : 'ru']} ${english ? 'Press for another fact.' : 'Нажмите, чтобы показать другой факт.'}`);
+}
+
+function refreshCinemaFact(showMessage = false) {
+  const offset = 1 + Math.floor(Math.random() * (CINEMA_FACTS.length - 1));
+  cinemaFactIndex = (Math.max(0, cinemaFactIndex) + offset) % CINEMA_FACTS.length;
+  renderCinemaFact();
+  cinemaFactCard.classList.remove('fact-changed');
+  requestAnimationFrame(() => cinemaFactCard.classList.add('fact-changed'));
+  if (showMessage) showToast(currentLanguage === 'en' ? 'Here is another movie fact' : 'Ещё один факт о кино');
 }
 
 function renderShuffleCard() {
@@ -1325,9 +1396,20 @@ function setQuickPanelExpanded(section = null) {
 
 function openQuickPanel(section = 'sound') {
   overlayReturnFocus.set(quickPanel, document.activeElement);
+  const browserOverlayAlreadyOpen = quickPanelOverBrowser && !quickPanel.hidden;
   quickPanelOverBrowser = browserOpen;
   quickPanel.classList.toggle('from-browser', quickPanelOverBrowser);
-  if (quickPanelOverBrowser) window.tv.setConfirmationVisible(true);
+  if (quickPanelOverBrowser && !browserOverlayAlreadyOpen) {
+    window.tv.setBrowserQuickPanel(true).then((result) => {
+      if (!quickPanelOverBrowser) return window.tv.setBrowserQuickPanel(false);
+      if (result?.snapshot) browserAppSnapshot.style.backgroundImage = `url(${result.snapshot})`;
+      else browserAppSnapshot.style.removeProperty('background-image');
+      browserAppSnapshot.hidden = false;
+      return result;
+    }).catch((error) => {
+      showToast(error?.message || (currentLanguage === 'en' ? 'Could not open quick settings' : 'Не удалось открыть быстрые настройки'));
+    });
+  }
   quickPanel.dataset.section = section;
   quickSoundSection.hidden = section !== 'sound';
   quickWifiSection.hidden = section !== 'wifi';
@@ -1344,13 +1426,21 @@ function openQuickPanel(section = 'sound') {
 
 function closeQuickPanel() {
   if (keyboardOpen) setKeyboardVisible(false);
+  const restoreBrowser = quickPanelOverBrowser;
+  let restorePromise = Promise.resolve();
   quickPanel.hidden = true;
   document.body.classList.remove('quick-panel-open');
   setQuickPanelExpanded();
-  if (quickPanelOverBrowser) window.tv.setConfirmationVisible(false);
   quickPanelOverBrowser = false;
   quickPanel.classList.remove('from-browser');
+  if (restoreBrowser) {
+    restorePromise = window.tv.setBrowserQuickPanel(false).finally(() => {
+      browserAppSnapshot.hidden = true;
+      browserAppSnapshot.style.removeProperty('background-image');
+    });
+  }
   refreshFocusables(overlayReturnFocus.get(quickPanel) || 0);
+  return restorePromise;
 }
 
 function renderAudio(state = {}) {
@@ -2067,6 +2157,11 @@ async function loadApps() {
     refreshFocusables(screensaverTimeout);
   });
   weatherCard.addEventListener('click', openWeatherPicker);
+  cinemaFactCard.addEventListener('click', () => refreshCinemaFact(true));
+  cinemaFactCard.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+    refreshCinemaFact(true);
+  });
   shufflePoster.addEventListener('error', () => {
     if (!shufflePoster.src.endsWith('/assets/posters/movie-night.webp')) {
       shufflePoster.src = '../../assets/posters/movie-night.webp';
@@ -2161,6 +2256,11 @@ async function loadApps() {
   browserFullscreenButton.addEventListener('click', () => window.tv.toggleBrowserFullscreen());
   browserKeyboardButton.addEventListener('click', () => setKeyboardVisible(!keyboardOpen));
   browserFocusButton.addEventListener('click', () => window.tv.focusBrowser());
+  browserSettingsButton.addEventListener('click', async () => {
+    if (!quickPanel.hidden) await closeQuickPanel();
+    await window.tv.goHome();
+    requestAnimationFrame(openManagePanel);
+  });
   keyboardToggle.addEventListener('click', () => setKeyboardVisible(!keyboardOpen));
   topbarVolume.addEventListener('click', () => {
     if (!quickPanel.hidden && quickPanel.dataset.section === 'sound') return closeQuickPanel();
@@ -2472,8 +2572,11 @@ function closeAllOverlays() {
   manageBackdrop.hidden = true;
   document.body.classList.remove('quick-panel-open');
   setQuickPanelExpanded();
+  window.tv.setBrowserQuickPanel(false);
   quickPanelOverBrowser = false;
   quickPanel.classList.remove('from-browser');
+  browserAppSnapshot.hidden = true;
+  browserAppSnapshot.style.removeProperty('background-image');
   activeAppsButton.setAttribute('aria-expanded', 'false');
   activeSettingsCategory = null;
   confirmHandler = null;
@@ -2503,6 +2606,7 @@ async function handleInputAction(action) {
   if (action === 'menu') {
     if (browserOpen) return window.tv.focusBrowser();
     if (document.activeElement === shuffleCard) return refreshMovieSuggestion(true);
+    if (document.activeElement === cinemaFactCard) return refreshCinemaFact(true);
     if (document.activeElement?.dataset?.app) {
       openManagePanel();
       return showSettingsCategory('apps');
@@ -2637,5 +2741,8 @@ setInterval(updateClock, 1000);
 setInterval(() => {
   refreshMovieSuggestion().catch(() => {});
 }, MOVIE_ROTATION_INTERVAL_MS);
+setInterval(() => {
+  refreshCinemaFact();
+}, CINEMA_FACT_ROTATION_INTERVAL_MS);
 loadApps().catch((error) => showToast(error.message));
 requestAnimationFrame(pollGamepads);

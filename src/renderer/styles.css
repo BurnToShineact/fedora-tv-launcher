@@ -2150,3 +2150,135 @@ body::before { opacity: .16; animation: none; }
   .browser-toolbar { grid-template-columns: minmax(0, 1fr) auto auto; }
   .browser-actions { min-width: 0; overflow: hidden; }
 }
+
+/* Header weather, rotating cinema facts and an app-backed quick overlay */
+.weather-status-pill {
+  min-width: 82px;
+  justify-content: center;
+}
+.weather-status-icon {
+  width: 23px;
+  height: 23px;
+  display: grid;
+  place-items: center;
+  color: #ffd98b;
+  font-size: 20px;
+  font-style: normal;
+}
+.weather-status-pill.is-night .weather-status-icon { color: #c8c5ff; }
+.weather-status-pill.is-error .weather-status-icon { color: #ffabb5; }
+.weather-status-pill.refreshing .weather-status-icon { animation: weather-turn .8s ease-in-out infinite; }
+
+.home-dashboard {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+.fact-card {
+  background:
+    radial-gradient(circle at 8% 10%, rgba(255, 213, 125, .18), transparent 42%),
+    linear-gradient(145deg, rgba(114, 73, 39, .72), rgba(54, 36, 32, .7));
+}
+.fact-card:hover,
+.fact-card:focus,
+.fact-card.focused {
+  background:
+    radial-gradient(circle at 8% 10%, rgba(255, 221, 150, .25), transparent 44%),
+    linear-gradient(145deg, rgba(138, 89, 47, .78), rgba(67, 43, 37, .76));
+}
+.fact-visual {
+  width: 116px;
+  height: 158px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 231, 188, .3);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 223, 158, .25), transparent 46%),
+    rgba(38, 25, 22, .72);
+  color: #ffe0a3;
+  box-shadow: 0 13px 28px rgba(20, 10, 5, .34);
+}
+.fact-visual svg {
+  width: 72%;
+  height: 72%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.fact-visual svg path:nth-child(3) { fill: currentColor; stroke: none; }
+.fact-copy { min-width: 0; }
+.fact-copy > span,
+.fact-copy strong { display: block; }
+.fact-copy strong {
+  margin-top: 9px;
+  overflow: hidden;
+  font-size: clamp(19px, 1.35vw, 25px);
+  line-height: 1.24;
+  letter-spacing: -.015em;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+.fact-copy > span:last-child {
+  margin-top: 10px;
+  overflow: hidden;
+  color: #e3cba9;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fact-card.fact-changed .fact-copy { animation: fact-enter 320ms cubic-bezier(.2,.8,.2,1); }
+@keyframes fact-enter {
+  from { opacity: .25; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.browser-settings-symbol,
+.browser-settings-symbol svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+.browser-settings-symbol svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.browser-app-snapshot {
+  position: fixed;
+  z-index: 22;
+  inset: 70px 0 0;
+  background-color: #090d14;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+.browser-app-snapshot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 9, 15, .14);
+  pointer-events: none;
+}
+.browser-app-snapshot[hidden] { display: none; }
+.quick-panel.from-browser {
+  top: 86px;
+  z-index: 70;
+  animation: browser-quick-panel-enter 320ms cubic-bezier(.16,.84,.24,1) both;
+}
+@keyframes browser-quick-panel-enter {
+  from { opacity: 0; transform: translateX(calc(100% + 50px)) scale(.97); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@media (max-width: 760px) {
+  .weather-status-pill { min-width: 40px; }
+  .fact-visual { width: 102px; height: 142px; }
+  .fact-card { grid-template-columns: 102px minmax(0, 1fr); }
+  .fact-copy strong { font-size: 19px; }
+}
